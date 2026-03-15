@@ -19,7 +19,7 @@
 | 9 | RunnerManager — 统一 Runner 管理 | ✅ 完成 | 2026-03-16 | workspace-storage + runner-manager |
 | 10 | Agent Runtime（沙箱内进程） | ✅ 完成 | 2026-03-16 | protocol + agent(echo) + runner 入口 + 心跳重连 |
 | 11 | AgentManager + WebSocket 通信 | ✅ 完成 | 2026-03-16 | agent-manager + channel adapter/webui + server WS 集成 |
-| 12 | WebUI 脚手架 + 路由 + Auth | ⬜ 未开始 | | |
+| 12 | WebUI 脚手架 + 路由 + Auth | ✅ 完成 | 2026-03-16 | vite + api client + auth store + Login + Layout + ProtectedRoute + App 路由 |
 | 13 | 对话界面 | ⬜ 未开始 | | |
 | 14 | 管理控制台 | ⬜ 未开始 | | |
 | 15 | WebUI 构建集成 | ⬜ 未开始 | | |
@@ -45,3 +45,4 @@
 - 2026-03-16：Task 7 完成，剩余 API 路由（skills/providers/tasks/logs/dashboard/invite-codes）+ sessions/memories 代理骨架
 - 2026-03-16：Task 8-10 完成，Dockerfile + RunnerManager + Agent Runtime（echo 占位）
 - 2026-03-16：Task 11 完成，AgentManager + Channel 抽象 + WebUI WebSocket + Server 入口重构
+- 2026-03-16：Task 12 完成，WebUI 脚手架 + Vite + API 客户端 + Auth + 路由

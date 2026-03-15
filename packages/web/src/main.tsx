@@ -1,2 +1,4 @@
-// @ccclaw/web — WebUI 入口
-// Task 12 中实现具体内容
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
+
+createRoot(document.getElementById('root')!).render(<App />);
