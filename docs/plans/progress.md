@@ -9,8 +9,8 @@
 | Task | 名称 | 状态 | 完成时间 | 备注 |
 |------|------|------|---------|------|
 | 1 | Monorepo 初始化 | ✅ 完成 | 2026-03-16 | 4 包 + typecheck 通过 |
-| 2 | Docker 开发环境 | ⬜ 未开始 | | |
-| 3 | 共享类型和工具 | ⬜ 未开始 | | |
+| 2 | Docker 开发环境 | ✅ 完成 | 2026-03-16 | compose.dev + compose.yml + compose.sqlite + Caddyfile |
+| 3 | 共享类型和工具 | ✅ 完成 | 2026-03-16 | types + schemas + constants + crypto（3 测试通过） |
 | 4 | 数据库 Schema + 迁移 + 密码工具 | ⬜ 未开始 | | |
 | 5 | 认证系统 | ⬜ 未开始 | | |
 | 6 | API 路由 — Auth + Users + Workspaces + Members | ⬜ 未开始 | | |
@@ -38,3 +38,4 @@
 
 - 2026-03-16：创建进度文件，准备开始 Task 1
 - 2026-03-16：Task 1 完成，monorepo 初始化 + pnpm install + typecheck 通过
+- 2026-03-16：Task 2 + Task 3 并行完成

@@ -1,0 +1,48 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ..
+      dockerfile: docker/server.Dockerfile
+    expose:
+      - "3000"
+    environment:
+      DB_DIALECT: postgresql
+      DATABASE_URL: postgresql://ccclaw:${DB_PASSWORD}@postgres:5432/ccclaw
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      DATA_DIR: /data/ccclaw
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - app_data:/data/ccclaw
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ccclaw
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ccclaw
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  caddy_data:
+  caddy_config:
+  app_data:

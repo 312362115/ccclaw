@@ -1,0 +1,13 @@
+export const MAX_CONCURRENT_SANDBOXES = 5;
+export const SANDBOX_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+export const SANDBOX_MEMORY_LIMIT = 512 * 1024 * 1024; // 512MB
+export const SANDBOX_CPU_QUOTA = 50000; // 50%
+export const SESSION_HISTORY_LIMIT = 20;
+export const LOGIN_MAX_ATTEMPTS = 5;
+export const LOGIN_LOCKOUT_MINUTES = 15;
+export const ACCESS_TOKEN_EXPIRY = '15m';
+export const REFRESH_TOKEN_EXPIRY_DAYS = 7;
+export const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+export const AGENT_MAX_RETRIES = 3;
+export const SCHEDULER_MAX_CONCURRENCY = 3;
+export const WORKSPACE_LABEL = 'ccclaw.workspace';

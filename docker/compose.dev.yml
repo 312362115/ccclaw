@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ccclaw
+      POSTGRES_PASSWORD: ccclaw
+      POSTGRES_DB: ccclaw
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pg_data:
