@@ -158,10 +158,10 @@ packages/server/
 │   ├── scheduler/    # 定时任务（node-cron + p-queue）
 │   └── runner/       # Runner 管理（统一 WS 通信）
 ├── skills/             # 系统预置 Skill（创建工作区时复制）
-│   ├── base/           # 自研基础（auto-memory、code-review、git-workflow）
+│   ├── find-skills/    # 技能发现（浏览和安装社区 Skill）
+│   ├── skill-creator/  # 技能开发（创建、修改、测试自定义 Skill）
 │   ├── superpowers/    # 开发工作流（brainstorming、writing-plans、TDD 等 12 个）
-│   ├── anthropic/      # 文档与工具（skill-creator、schedule、pdf/docx/xlsx/pptx）
-│   └── api/            # API 开发（claude-api）
+│   └── anthropic/      # 文档与工具（schedule、pdf/docx/xlsx/pptx、claude-api）
 ├── auth/
 │   ├── jwt.ts        # JWT 签发/验证
 │   └── rbac.ts       # 角色权限校验
@@ -691,12 +691,13 @@ skills {
 
 系统内置若干通用 Skill，存放在 `packages/server/src/skills/` 目录下。用户创建工作区时，预置 Skill 自动复制到工作区的 `skills/` 目录，作为工作区级 Skill 加载。用户可在工作区中编辑、删除或新增 Skill。
 
-预置 Skill 分组（按目录组织在 `packages/server/src/skills/` 下）：
+预置 Skill 来源（按目录组织在 `packages/server/src/skills/` 下）：
 
-**自研基础 Skill**：
-- `auto-memory`：引导 Agent 在对话中主动写入工作日志和关键信息到 memory
-- `code-review`：代码审查流程，Agent 对变更进行 CR 并给出建议
-- `git-workflow`：Git 操作规范，commit message 格式、分支策略等
+**find-skills**（技能发现）：
+- `find-skills`：浏览和安装社区 Skill，搜索可用技能包
+
+**skill-creator**（技能开发）：
+- `skill-creator`：创建、修改和测试自定义 Skill
 
 **superpowers 系列**（开发工作流增强）：
 - `brainstorming`：需求脑暴 → 设计文档
@@ -712,11 +713,8 @@ skills {
 - `dispatching-parallel-agents`：并行任务分发
 
 **anthropic-skills 系列**（文档与工具）：
-- `skill-creator`：创建和管理 Skill
 - `schedule`：定时任务配置
 - `pdf` / `docx` / `xlsx` / `pptx`：文档格式读写
-
-**API 开发**：
 - `claude-api`：Anthropic SDK / Agent SDK 开发辅助
 
 > 预置 Skill 仅在创建工作区时复制一次，后续系统更新预置 Skill 不会覆盖用户已有的工作区 Skill。

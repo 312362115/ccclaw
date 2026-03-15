@@ -85,10 +85,10 @@ ccclaw/
 │   │       │   ├── security.ts           # secureHeaders + CORS
 │   │       │   └── audit.ts              # 审计日志中间件
 │   │       ├── skills/                   # 系统预置 Skill（创建工作区时复制）
-│   │       │   ├── base/                # 自研基础（auto-memory、code-review、git-workflow）
+│   │       │   ├── find-skills/         # 技能发现（浏览和安装社区 Skill）
+│   │       │   ├── skill-creator/       # 技能开发（创建、修改、测试自定义 Skill）
 │   │       │   ├── superpowers/         # 开发工作流（brainstorming、writing-plans、TDD 等 12 个）
-│   │       │   ├── anthropic/           # 文档与工具（skill-creator、schedule、pdf/docx/xlsx/pptx）
-│   │       │   └── api/                 # API 开发（claude-api）
+│   │       │   └── anthropic/           # 文档与工具（schedule、pdf/docx/xlsx/pptx、claude-api）
 │   │       └── logger.ts                 # Pino 配置
 │   ├── agent-runtime/                    # Runner 进程（沙箱内运行）
 │   │   ├── package.json
