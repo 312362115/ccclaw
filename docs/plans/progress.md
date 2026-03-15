@@ -26,8 +26,8 @@
 | 16 | 上下文组装 | ✅ 完成 | 2026-03-16 | Task 11 已实现 assembleContext，session summary 为 Runner 侧增强 |
 | 17 | 完整 Agent SDK 集成 | ✅ 完成 | 2026-03-16 | 6 个工具（bash/file/git/glob/grep/web-fetch）+ echo agent 保留 |
 | 18 | ToolGuard — Agent 行为安全 | ✅ 完成 | 2026-03-16 | 黑名单/确认名单规则 + 14 个测试全部通过 |
-| 19 | 定时任务调度 | ⬜ 未开始 | | |
-| 19.5 | Chunk 4 中间验证 + 单元测试 | ⬜ 未开始 | | |
+| 19 | 定时任务调度 | ✅ 完成 | 2026-03-16 | scheduler（cron + p-queue）+ 集成到 server 启动 |
+| 19.5 | Chunk 4 中间验证 + 单元测试 | ✅ 完成 | 2026-03-16 | 4 包 typecheck 通过 + 18 测试通过（password + crypto + tool-guard） |
 | 20 | Docker 生产部署 | ⬜ 未开始 | | |
 
 ## 当前阻塞 / 待决策
@@ -50,3 +50,4 @@
 - 2026-03-16：Task 14 完成，管理控制台（7 个页面 + 侧边导航）
 - 2026-03-16：Task 15+16 完成，WebUI 构建集成 + 上下文组装
 - 2026-03-16：Task 17+18 完成，Agent 工具集（6 个）+ ToolGuard 安全拦截（14 测试通过）
+- 2026-03-16：Task 19+19.5 完成，定时任务调度 + 全量验证（4 包 typecheck + 18 测试）

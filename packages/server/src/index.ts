@@ -7,6 +7,7 @@ import { securityHeaders, corsMiddleware } from './middleware/security.js';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { createWebSocketHandler } from './channel/webui.js';
 import { runnerManager } from './core/runner-manager.js';
+import { startScheduler } from './core/scheduler.js';
 
 const app = new Hono();
 
@@ -62,6 +63,9 @@ createWebSocketHandler(server);
 
 // 启动 RunnerManager 清理循环
 runnerManager.startCleanupLoop();
+
+// 启动定时任务调度器
+startScheduler();
 
 server.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'CCCLaw server started');
