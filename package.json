@@ -1,0 +1,22 @@
+{
+  "name": "ccclaw",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @ccclaw/server dev",
+    "build": "pnpm -r build",
+    "migrate": "pnpm --filter @ccclaw/server migrate",
+    "seed": "pnpm --filter @ccclaw/server seed",
+    "lint": "eslint packages/*/src",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  }
+}

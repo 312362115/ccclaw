@@ -161,7 +161,7 @@ packages/server/
 │   ├── find-skills/    # 技能发现（浏览和安装社区 Skill）
 │   ├── skill-creator/  # 技能开发（创建、修改、测试自定义 Skill）
 │   ├── superpowers/    # 开发工作流（brainstorming、writing-plans、TDD 等 12 个）
-│   └── anthropic/      # 文档与工具（schedule、pdf/docx/xlsx/pptx、claude-api）
+│   └── anthropic/      # 文档与工具（schedule、pdf/docx/xlsx/pptx）
 ├── auth/
 │   ├── jwt.ts        # JWT 签发/验证
 │   └── rbac.ts       # 角色权限校验
@@ -694,7 +694,7 @@ skills {
 预置 Skill 来源（按目录组织在 `packages/server/src/skills/` 下）：
 
 **find-skills**（技能发现）：
-- `find-skills`：浏览和安装社区 Skill，搜索可用技能包
+- `find-skills`：浏览和安装社区 Skill，数据源对接 [skills.sh](https://skills.sh/) 技能市场
 
 **skill-creator**（技能开发）：
 - `skill-creator`：创建、修改和测试自定义 Skill
@@ -715,7 +715,7 @@ skills {
 **anthropic-skills 系列**（文档与工具）：
 - `schedule`：定时任务配置
 - `pdf` / `docx` / `xlsx` / `pptx`：文档格式读写
-- `claude-api`：Anthropic SDK / Agent SDK 开发辅助
+- `frontend-design`：前端界面设计与实现
 
 > 预置 Skill 仅在创建工作区时复制一次，后续系统更新预置 Skill 不会覆盖用户已有的工作区 Skill。
 
