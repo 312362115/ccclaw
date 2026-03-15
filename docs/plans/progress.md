@@ -28,7 +28,7 @@
 | 18 | ToolGuard — Agent 行为安全 | ✅ 完成 | 2026-03-16 | 黑名单/确认名单规则 + 14 个测试全部通过 |
 | 19 | 定时任务调度 | ✅ 完成 | 2026-03-16 | scheduler（cron + p-queue）+ 集成到 server 启动 |
 | 19.5 | Chunk 4 中间验证 + 单元测试 | ✅ 完成 | 2026-03-16 | 4 包 typecheck 通过 + 18 测试通过（password + crypto + tool-guard） |
-| 20 | Docker 生产部署 | ⬜ 未开始 | | |
+| 20 | Docker 生产部署 | ✅ 完成 | 2026-03-16 | server.Dockerfile（多阶段构建）+ .dockerignore |
 
 ## 当前阻塞 / 待决策
 
@@ -51,3 +51,5 @@
 - 2026-03-16：Task 15+16 完成，WebUI 构建集成 + 上下文组装
 - 2026-03-16：Task 17+18 完成，Agent 工具集（6 个）+ ToolGuard 安全拦截（14 测试通过）
 - 2026-03-16：Task 19+19.5 完成，定时任务调度 + 全量验证（4 包 typecheck + 18 测试）
+- 2026-03-16：Task 20 完成，Docker 生产部署配置
+- 2026-03-16：全部 20 个 Task 完成
