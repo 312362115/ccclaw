@@ -50,7 +50,7 @@ const API_RATE_WINDOW_MS = 60_000;
 
 export function apiRateLimitMiddleware(maxRequests = API_RATE_LIMIT) {
   return async (c: Context, next: Next) => {
-    const user = c.get('user');
+    const user = c.get('user' as never) as { sub: string } | undefined;
     if (!user) return next(); // 未认证请求由 auth 中间件拦截
 
     const key = user.sub;

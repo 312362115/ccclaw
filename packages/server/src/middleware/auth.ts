@@ -10,7 +10,7 @@ export async function authMiddleware(c: Context, next: Next) {
   try {
     const token = authHeader.slice(7);
     const payload = await verifyAccessToken(token);
-    c.set('user', payload);
+    c.set('user' as never, payload as never);
     return next();
   } catch {
     return c.json({ error: 'Token 无效或已过期' }, 401);
