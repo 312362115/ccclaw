@@ -15,9 +15,9 @@
 | 5 | 认证系统 | ✅ 完成 | 2026-03-16 | JWT + bcrypt + RBAC + 登录限流 + API 限流 + 审计 |
 | 6 | API 路由 — Auth + Users + Workspaces + Members | ✅ 完成 | 2026-03-16 | auth（login/logout/refresh/me/register）+ users CRUD + workspaces CRUD + 服务入口 |
 | 7 | API 路由 — Sessions + Memories + Skills + Providers + Tasks + Files + Logs + Dashboard | ✅ 完成 | 2026-03-16 | skills/providers/tasks/logs/dashboard/invite-codes + sessions/memories 代理骨架 |
-| 8 | 沙箱容器镜像 + 运行时适配器 | ⬜ 未开始 | | |
-| 9 | RunnerManager — 统一 Runner 管理 | ⬜ 未开始 | | |
-| 10 | Agent Runtime（沙箱内进程） | ⬜ 未开始 | | |
+| 8 | 沙箱容器镜像 + 运行时适配器 | ✅ 完成 | 2026-03-16 | docker/sandbox/Dockerfile |
+| 9 | RunnerManager — 统一 Runner 管理 | ✅ 完成 | 2026-03-16 | workspace-storage + runner-manager |
+| 10 | Agent Runtime（沙箱内进程） | ✅ 完成 | 2026-03-16 | protocol + agent(echo) + runner 入口 + 心跳重连 |
 | 11 | AgentManager + WebSocket 通信 | ⬜ 未开始 | | |
 | 12 | WebUI 脚手架 + 路由 + Auth | ⬜ 未开始 | | |
 | 13 | 对话界面 | ⬜ 未开始 | | |
@@ -43,3 +43,4 @@
 - 2026-03-16：Task 5 完成，认证系统（jwt/rate-limit/rbac/middleware）+ 修复 shared 包导出
 - 2026-03-16：Task 6 完成，API 路由（auth/users/workspaces）+ 服务入口 + AppEnv 类型定义
 - 2026-03-16：Task 7 完成，剩余 API 路由（skills/providers/tasks/logs/dashboard/invite-codes）+ sessions/memories 代理骨架
+- 2026-03-16：Task 8-10 完成，Dockerfile + RunnerManager + Agent Runtime（echo 占位）
