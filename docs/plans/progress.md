@@ -22,8 +22,8 @@
 | 12 | WebUI 脚手架 + 路由 + Auth | ✅ 完成 | 2026-03-16 | vite + api client + auth store + Login + Layout + ProtectedRoute + App 路由 |
 | 13 | 对话界面 | ✅ 完成 | 2026-03-16 | ws client + chat store + ChatLayout/SessionList/ChatView/MessageBubble + ConfirmDialog |
 | 14 | 管理控制台 | ✅ 完成 | 2026-03-16 | ConsoleLayout + Dashboard/Workspaces/Providers/Skills/Logs/Users/Settings |
-| 15 | WebUI 构建集成 | ⬜ 未开始 | | |
-| 16 | 上下文组装 | ⬜ 未开始 | | |
+| 15 | WebUI 构建集成 | ✅ 完成 | 2026-03-16 | serveStatic 生产托管 + SPA fallback |
+| 16 | 上下文组装 | ✅ 完成 | 2026-03-16 | Task 11 已实现 assembleContext，session summary 为 Runner 侧增强 |
 | 17 | 完整 Agent SDK 集成 | ⬜ 未开始 | | |
 | 18 | ToolGuard — Agent 行为安全 | ⬜ 未开始 | | |
 | 19 | 定时任务调度 | ⬜ 未开始 | | |
@@ -48,3 +48,4 @@
 - 2026-03-16：Task 12 完成，WebUI 脚手架 + Vite + API 客户端 + Auth + 路由
 - 2026-03-16：Task 13 完成，对话界面（WS 客户端 + Chat Store + 完整对话 UI 组件）
 - 2026-03-16：Task 14 完成，管理控制台（7 个页面 + 侧边导航）
+- 2026-03-16：Task 15+16 完成，WebUI 构建集成 + 上下文组装

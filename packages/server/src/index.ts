@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { logger } from './logger.js';
 import { api } from './api/index.js';
 import { securityHeaders, corsMiddleware } from './middleware/security.js';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { createWebSocketHandler } from './channel/webui.js';
 import { runnerManager } from './core/runner-manager.js';
 
@@ -18,6 +19,13 @@ app.route('/api', api);
 
 // 健康检查
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// 生产环境：托管 WebUI 静态文件
+if (config.NODE_ENV === 'production') {
+  app.use('/*', serveStatic({ root: '../../dist/web' }));
+  // SPA fallback
+  app.get('*', serveStatic({ path: '../../dist/web/index.html' }));
+}
 
 // 创建 HTTP server（给 Hono 和 WebSocket 共用）
 const server = createServer((req, res) => {
