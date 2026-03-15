@@ -21,7 +21,7 @@
 | 11 | AgentManager + WebSocket 通信 | ✅ 完成 | 2026-03-16 | agent-manager + channel adapter/webui + server WS 集成 |
 | 12 | WebUI 脚手架 + 路由 + Auth | ✅ 完成 | 2026-03-16 | vite + api client + auth store + Login + Layout + ProtectedRoute + App 路由 |
 | 13 | 对话界面 | ✅ 完成 | 2026-03-16 | ws client + chat store + ChatLayout/SessionList/ChatView/MessageBubble + ConfirmDialog |
-| 14 | 管理控制台 | ⬜ 未开始 | | |
+| 14 | 管理控制台 | ✅ 完成 | 2026-03-16 | ConsoleLayout + Dashboard/Workspaces/Providers/Skills/Logs/Users/Settings |
 | 15 | WebUI 构建集成 | ⬜ 未开始 | | |
 | 16 | 上下文组装 | ⬜ 未开始 | | |
 | 17 | 完整 Agent SDK 集成 | ⬜ 未开始 | | |
@@ -47,3 +47,4 @@
 - 2026-03-16：Task 11 完成，AgentManager + Channel 抽象 + WebUI WebSocket + Server 入口重构
 - 2026-03-16：Task 12 完成，WebUI 脚手架 + Vite + API 客户端 + Auth + 路由
 - 2026-03-16：Task 13 完成，对话界面（WS 客户端 + Chat Store + 完整对话 UI 组件）
+- 2026-03-16：Task 14 完成，管理控制台（7 个页面 + 侧边导航）

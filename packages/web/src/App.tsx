@@ -5,6 +5,14 @@ import { Login } from './pages/Login';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ChatLayout } from './pages/chat/ChatLayout';
+import { ConsoleLayout } from './pages/console/ConsoleLayout';
+import { Dashboard } from './pages/console/Dashboard';
+import { Workspaces } from './pages/console/Workspaces';
+import { Providers } from './pages/console/Providers';
+import { Skills } from './pages/console/Skills';
+import { Logs } from './pages/console/Logs';
+import { Users } from './pages/console/Users';
+import { Settings } from './pages/console/Settings';
 
 function Home() {
   return (
@@ -13,11 +21,6 @@ function Home() {
       <p>请从顶部导航进入对话或控制台。</p>
     </div>
   );
-}
-
-// 占位页面（Task 14 实现）
-function ConsolePlaceholder() {
-  return <div style={{ padding: 24 }}>控制台（Task 14 实现）</div>;
 }
 
 export function App() {
@@ -42,7 +45,15 @@ export function App() {
           <Route index element={<Home />} />
           <Route path="chat" element={<ChatLayout />} />
           <Route path="chat/:workspaceId" element={<ChatLayout />} />
-          <Route path="console/*" element={<ConsolePlaceholder />} />
+          <Route path="console" element={<ConsoleLayout />}>
+            <Route index element={<Dashboard />} />
+            <Route path="workspaces" element={<Workspaces />} />
+            <Route path="providers" element={<Providers />} />
+            <Route path="skills" element={<Skills />} />
+            <Route path="logs" element={<Logs />} />
+            <Route path="users" element={<Users />} />
+            <Route path="settings" element={<Settings />} />
+          </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
