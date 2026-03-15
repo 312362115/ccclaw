@@ -14,7 +14,7 @@
 | 4 | 数据库 Schema + 迁移 + 密码工具 | ✅ 完成 | 2026-03-16 | 3 方言 schema + config + logger + password + drizzle config + seed + SQLite 迁移生成 |
 | 5 | 认证系统 | ✅ 完成 | 2026-03-16 | JWT + bcrypt + RBAC + 登录限流 + API 限流 + 审计 |
 | 6 | API 路由 — Auth + Users + Workspaces + Members | ✅ 完成 | 2026-03-16 | auth（login/logout/refresh/me/register）+ users CRUD + workspaces CRUD + 服务入口 |
-| 7 | API 路由 — Sessions + Memories + Skills + Providers + Tasks + Files + Logs + Dashboard | ⬜ 未开始 | | |
+| 7 | API 路由 — Sessions + Memories + Skills + Providers + Tasks + Files + Logs + Dashboard | ✅ 完成 | 2026-03-16 | skills/providers/tasks/logs/dashboard/invite-codes + sessions/memories 代理骨架 |
 | 8 | 沙箱容器镜像 + 运行时适配器 | ⬜ 未开始 | | |
 | 9 | RunnerManager — 统一 Runner 管理 | ⬜ 未开始 | | |
 | 10 | Agent Runtime（沙箱内进程） | ⬜ 未开始 | | |
@@ -42,3 +42,4 @@
 - 2026-03-16：Task 4 完成，3 方言 DB schema（12 表）+ config + logger + password 工具 + seed 脚本
 - 2026-03-16：Task 5 完成，认证系统（jwt/rate-limit/rbac/middleware）+ 修复 shared 包导出
 - 2026-03-16：Task 6 完成，API 路由（auth/users/workspaces）+ 服务入口 + AppEnv 类型定义
+- 2026-03-16：Task 7 完成，剩余 API 路由（skills/providers/tasks/logs/dashboard/invite-codes）+ sessions/memories 代理骨架
