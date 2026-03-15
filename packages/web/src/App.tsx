@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/auth';
 import { Login } from './pages/Login';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { ChatLayout } from './pages/chat/ChatLayout';
 
 function Home() {
   return (
@@ -14,11 +15,7 @@ function Home() {
   );
 }
 
-// 占位页面（Task 13/14 实现）
-function ChatPlaceholder() {
-  return <div style={{ padding: 24 }}>对话界面（Task 13 实现）</div>;
-}
-
+// 占位页面（Task 14 实现）
 function ConsolePlaceholder() {
   return <div style={{ padding: 24 }}>控制台（Task 14 实现）</div>;
 }
@@ -43,8 +40,8 @@ export function App() {
           }
         >
           <Route index element={<Home />} />
-          <Route path="chat" element={<ChatPlaceholder />} />
-          <Route path="chat/:workspaceId" element={<ChatPlaceholder />} />
+          <Route path="chat" element={<ChatLayout />} />
+          <Route path="chat/:workspaceId" element={<ChatLayout />} />
           <Route path="console/*" element={<ConsolePlaceholder />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
