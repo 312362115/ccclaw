@@ -5,6 +5,7 @@ export function Layout() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
 
   const handleLogout = async () => {
     await logout();
@@ -16,8 +17,9 @@ export function Layout() {
       <header style={{ background: '#1a73e8', color: '#fff', padding: '0 24px', height: 48, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
           <Link to="/" style={{ color: '#fff', textDecoration: 'none', fontWeight: 'bold', fontSize: 18 }}>CCCLaw</Link>
-          <Link to="/chat" style={{ color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: 14 }}>对话</Link>
-          <Link to="/console" style={{ color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: 14 }}>控制台</Link>
+          <Link to="/chat" style={navLinkStyle}>对话</Link>
+          <Link to="/console" style={navLinkStyle}>工作台</Link>
+          {isAdmin && <Link to="/admin" style={navLinkStyle}>管理后台</Link>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 14 }}>{user?.name}</span>
@@ -32,3 +34,5 @@ export function Layout() {
     </div>
   );
 }
+
+const navLinkStyle: React.CSSProperties = { color: 'rgba(255,255,255,0.8)', textDecoration: 'none', fontSize: 14 };

@@ -11,8 +11,12 @@ import { Workspaces } from './pages/console/Workspaces';
 import { Providers } from './pages/console/Providers';
 import { Skills } from './pages/console/Skills';
 import { Logs } from './pages/console/Logs';
-import { Users } from './pages/console/Users';
 import { Settings } from './pages/console/Settings';
+import { AdminLayout } from './pages/admin/AdminLayout';
+import { AdminDashboard } from './pages/admin/AdminDashboard';
+import { Users } from './pages/admin/Users';
+import { InviteCodes } from './pages/admin/InviteCodes';
+import { AdminLogs } from './pages/admin/AdminLogs';
 
 export function App() {
   const fetchMe = useAuthStore((s) => s.fetchMe);
@@ -42,8 +46,13 @@ export function App() {
             <Route path="providers" element={<Providers />} />
             <Route path="skills" element={<Skills />} />
             <Route path="logs" element={<Logs />} />
-            <Route path="users" element={<Users />} />
             <Route path="settings" element={<Settings />} />
+          </Route>
+          <Route path="admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<Users />} />
+            <Route path="invite-codes" element={<InviteCodes />} />
+            <Route path="logs" element={<AdminLogs />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

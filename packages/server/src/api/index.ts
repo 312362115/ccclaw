@@ -11,6 +11,7 @@ import { logsRouter } from './logs.js';
 import { dashboardRouter } from './dashboard.js';
 import { inviteCodesRouter } from './invite-codes.js';
 import { preferencesRouter } from './preferences.js';
+import { adminRouter } from './admin.js';
 
 export const api = new Hono();
 
@@ -26,3 +27,4 @@ api.route('/logs', logsRouter);
 api.route('/dashboard', dashboardRouter);
 api.route('/invite-codes', inviteCodesRouter);
 api.route('/settings/preferences', preferencesRouter);
+api.route('/admin', adminRouter);

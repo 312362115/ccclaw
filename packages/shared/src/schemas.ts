@@ -22,7 +22,7 @@ export const updateUserSchema = z.object({
 // Workspace
 export const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(100),
-  slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/),
+  slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
   gitRepo: z.string().url().optional(),
 });
 
@@ -68,7 +68,7 @@ export const updateSkillSchema = z.object({
 // Provider
 export const createProviderSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(['claude', 'openai', 'deepseek']).default('claude'),
+  type: z.enum(['claude', 'openai', 'deepseek', 'litellm']).default('claude'),
   authType: z.enum(['api_key', 'oauth']).default('api_key'),
   config: z.record(z.unknown()),
   isDefault: z.boolean().optional().default(false),

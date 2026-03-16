@@ -1,11 +1,15 @@
 import { Hono } from 'hono';
 import { db, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
-import { createWorkspaceSchema, updateWorkspaceSchema } from '@ccclaw/shared';
+import { createWorkspaceSchema, updateWorkspaceSchema, slugId } from '@ccclaw/shared';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireWorkspaceAccess } from '../auth/rbac.js';
 import { audit } from '../middleware/audit.js';
 import type { AppEnv } from '../types.js';
+
+function generateSlug(): string {
+  return `ws-${slugId()}`;
+}
 
 export const workspacesRouter = new Hono<AppEnv>();
 
@@ -25,13 +29,15 @@ workspacesRouter.post('/', async (c) => {
   const body = createWorkspaceSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: '参数错误', details: body.error.flatten() }, 400);
 
+  const slug = body.data.slug || generateSlug();
+
   const [existing] = await db.select().from(schema.workspaces)
-    .where(eq(schema.workspaces.slug, body.data.slug)).limit(1);
+    .where(eq(schema.workspaces.slug, slug)).limit(1);
   if (existing) return c.json({ error: 'slug 已存在' }, 409);
 
   const [workspace] = await db.insert(schema.workspaces).values({
     name: body.data.name,
-    slug: body.data.slug,
+    slug,
     createdBy: user.sub,
     gitRepo: body.data.gitRepo ?? null,
   } as any).returning();

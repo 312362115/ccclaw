@@ -109,6 +109,16 @@ export const auditLogs = sqliteTable('audit_logs', {
   createdAt: createdAt(),
 });
 
+export const adminLogs = sqliteTable('admin_logs', {
+  id: id(),
+  userId: text('user_id').notNull().references(() => users.id),
+  action: text('action').notNull(),
+  target: text('target').notNull(),
+  detail: text('detail', { mode: 'json' }),
+  ip: text('ip').notNull(),
+  createdAt: createdAt(),
+});
+
 export const inviteCodes = sqliteTable('invite_codes', {
   id: id(),
   code: text('code').notNull().unique(),

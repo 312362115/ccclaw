@@ -112,6 +112,16 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+export const adminLogs = pgTable('admin_logs', {
+  id: id(),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id),
+  action: varchar('action', { length: 100 }).notNull(),
+  target: varchar('target', { length: 255 }).notNull(),
+  detail: jsonb('detail'),
+  ip: varchar('ip', { length: 45 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const inviteCodes = pgTable('invite_codes', {
   id: id(),
   code: varchar('code', { length: 20 }).notNull().unique(),

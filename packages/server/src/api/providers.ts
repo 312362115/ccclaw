@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { db, schema } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/auth.js';
-import { encrypt } from '@ccclaw/shared';
+import { encrypt, decrypt } from '@ccclaw/shared';
 import { config } from '../config.js';
 import { createProviderSchema, updateProviderSchema } from '@ccclaw/shared';
 import type { AppEnv } from '../types.js';
@@ -52,6 +52,39 @@ providersRouter.post('/', async (c) => {
   return c.json({ id: row.id, name: row.name, type: row.type, authType: row.authType, isDefault: row.isDefault }, 201);
 });
 
+// GET /api/providers/:id — 单个 Provider 详情（API Key 脱敏）
+providersRouter.get('/:id', async (c) => {
+  const id = c.req.param('id')!;
+  const userId = c.get('user').sub;
+  const [provider] = await db.select().from(schema.providers)
+    .where(and(eq(schema.providers.id, id), eq(schema.providers.userId, userId)))
+    .limit(1);
+  if (!provider) return c.json({ error: 'Provider 不存在' }, 404);
+
+  let safeConfig: Record<string, unknown> = {};
+  try {
+    const cfg = JSON.parse(decrypt(provider.config as string, config.ENCRYPTION_KEY));
+    // API Key 脱敏：只显示前 4 位和后 4 位
+    const key = typeof cfg.key === 'string' ? cfg.key : '';
+    const maskedKey = key.length > 8 ? `${key.slice(0, 4)}****${key.slice(-4)}` : '****';
+    safeConfig = {
+      maskedKey,
+      baseURL: cfg.baseURL ?? '',
+      models: Array.isArray(cfg.models) ? cfg.models : [],
+    };
+  } catch { /* ignore */ }
+
+  return c.json({
+    id: provider.id,
+    name: provider.name,
+    type: provider.type,
+    authType: provider.authType,
+    isDefault: provider.isDefault,
+    createdAt: provider.createdAt,
+    config: safeConfig,
+  });
+});
+
 // PATCH /api/providers/:id
 providersRouter.patch('/:id', async (c) => {
   const id = c.req.param('id')!;
@@ -67,13 +100,40 @@ providersRouter.patch('/:id', async (c) => {
 
   const updates: Record<string, unknown> = {};
   if (body.data.name) updates.name = body.data.name;
-  if (body.data.config) updates.config = encrypt(JSON.stringify(body.data.config), config.ENCRYPTION_KEY);
+  if (body.data.config) {
+    // 合并新旧 config，避免部分更新丢失已有字段（如只更新 models 不丢 key）
+    const [existing] = await db.select().from(schema.providers)
+      .where(and(eq(schema.providers.id, id), eq(schema.providers.userId, userId)))
+      .limit(1);
+    if (!existing) return c.json({ error: 'Provider 不存在' }, 404);
+    let oldCfg: Record<string, unknown> = {};
+    try { oldCfg = JSON.parse(decrypt(existing.config as string, config.ENCRYPTION_KEY)); } catch { /* ignore */ }
+    const merged = { ...oldCfg, ...body.data.config };
+    updates.config = encrypt(JSON.stringify(merged), config.ENCRYPTION_KEY);
+  }
   if (body.data.isDefault !== undefined) updates.isDefault = body.data.isDefault;
 
   await db.update(schema.providers).set(updates as any)
     .where(and(eq(schema.providers.id, id), eq(schema.providers.userId, userId)));
 
   return c.json({ ok: true });
+});
+
+// GET /api/providers/:id/models — 返回该 Provider 配置的模型列表
+providersRouter.get('/:id/models', async (c) => {
+  const id = c.req.param('id')!;
+  const userId = c.get('user').sub;
+  const [provider] = await db.select().from(schema.providers)
+    .where(and(eq(schema.providers.id, id), eq(schema.providers.userId, userId)))
+    .limit(1);
+  if (!provider) return c.json({ error: 'Provider 不存在' }, 404);
+
+  try {
+    const cfg = JSON.parse(decrypt(provider.config as string, config.ENCRYPTION_KEY));
+    return c.json({ models: Array.isArray(cfg.models) ? cfg.models : [] });
+  } catch {
+    return c.json({ models: [] });
+  }
 });
 
 // DELETE /api/providers/:id

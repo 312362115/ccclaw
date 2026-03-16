@@ -1,15 +1,20 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, Navigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/auth';
 
 const navItems = [
-  { path: '/console', label: '概览', end: true },
-  { path: '/console/workspaces', label: '工作区' },
-  { path: '/console/providers', label: 'API Key' },
-  { path: '/console/skills', label: '技能' },
-  { path: '/console/logs', label: '操作日志' },
-  { path: '/console/settings', label: '设置' },
+  { path: '/admin', label: '概览', end: true },
+  { path: '/admin/users', label: '用户管理' },
+  { path: '/admin/invite-codes', label: '邀请码' },
+  { path: '/admin/logs', label: '管理日志' },
 ];
 
-export function ConsoleLayout() {
+export function AdminLayout() {
+  const user = useAuthStore((s) => s.user);
+
+  if (user?.role !== 'admin') {
+    return <Navigate to="/console" replace />;
+  }
+
   return (
     <div style={{ display: 'flex', height: 'calc(100vh - 48px)' }}>
       <nav style={{ width: 200, borderRight: '1px solid #e0e0e0', padding: '16px 0', overflow: 'auto' }}>
@@ -21,8 +26,8 @@ export function ConsoleLayout() {
             style={({ isActive }) => ({
               display: 'block',
               padding: '8px 20px',
-              color: isActive ? '#1a73e8' : '#333',
-              background: isActive ? '#e8f0fe' : 'transparent',
+              color: isActive ? '#c62828' : '#333',
+              background: isActive ? '#ffebee' : 'transparent',
               textDecoration: 'none',
               fontSize: 14,
             })}

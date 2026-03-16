@@ -109,6 +109,16 @@ export const auditLogs = mysqlTable('audit_logs', {
   createdAt: createdAt(),
 });
 
+export const adminLogs = mysqlTable('admin_logs', {
+  id: id(),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id),
+  action: varchar('action', { length: 100 }).notNull(),
+  target: varchar('target', { length: 255 }).notNull(),
+  detail: json('detail'),
+  ip: varchar('ip', { length: 45 }).notNull(),
+  createdAt: createdAt(),
+});
+
 export const inviteCodes = mysqlTable('invite_codes', {
   id: id(),
   code: varchar('code', { length: 20 }).notNull().unique(),
