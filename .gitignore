@@ -5,3 +5,5 @@ dist/
 .DS_Store
 .claude/
 nanobot/
+data/
+.history/
