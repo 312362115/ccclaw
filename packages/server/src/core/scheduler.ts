@@ -35,7 +35,7 @@ export function stopScheduler() {
  * 扫描到期任务并入队执行
  */
 async function scanAndDispatch() {
-  const now = new Date();
+  const now = new Date().toISOString();
 
   const tasks = await db.select().from(schema.scheduledTasks).where(
     and(

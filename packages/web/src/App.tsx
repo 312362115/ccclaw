@@ -14,15 +14,6 @@ import { Logs } from './pages/console/Logs';
 import { Users } from './pages/console/Users';
 import { Settings } from './pages/console/Settings';
 
-function Home() {
-  return (
-    <div style={{ padding: 24 }}>
-      <h2>欢迎使用 CCCLaw</h2>
-      <p>请从顶部导航进入对话或控制台。</p>
-    </div>
-  );
-}
-
 export function App() {
   const fetchMe = useAuthStore((s) => s.fetchMe);
 
@@ -42,7 +33,7 @@ export function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Home />} />
+          <Route index element={<Navigate to="/console" replace />} />
           <Route path="chat" element={<ChatLayout />} />
           <Route path="chat/:workspaceId" element={<ChatLayout />} />
           <Route path="console" element={<ConsoleLayout />}>

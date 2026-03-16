@@ -25,6 +25,12 @@ export const userPreferences = pgTable('user_preferences', {
   language: varchar('language', { length: 20 }),
   style: varchar('style', { length: 50 }),
   customRules: text('custom_rules'),
+  agentModel: varchar('agent_model', { length: 100 }),
+  maxTokens: integer('max_tokens'),
+  contextWindowTokens: integer('context_window_tokens'),
+  temperature: integer('temperature'),
+  reasoningEffort: varchar('reasoning_effort', { length: 20 }),
+  toolConfirmMode: varchar('tool_confirm_mode', { length: 20 }),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
 

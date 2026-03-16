@@ -23,6 +23,12 @@ export const userPreferences = sqliteTable('user_preferences', {
   language: text('language'),
   style: text('style'),
   customRules: text('custom_rules'),
+  agentModel: text('agent_model'),
+  maxTokens: integer('max_tokens'),
+  contextWindowTokens: integer('context_window_tokens'),
+  temperature: integer('temperature'), // stored as integer * 100 (e.g. 70 = 0.7)
+  reasoningEffort: text('reasoning_effort'), // 'low' | 'medium' | 'high'
+  toolConfirmMode: text('tool_confirm_mode'), // 'always' | 'smart' | 'never'
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
 });
 

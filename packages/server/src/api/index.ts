@@ -10,6 +10,7 @@ import { tasksRouter } from './tasks.js';
 import { logsRouter } from './logs.js';
 import { dashboardRouter } from './dashboard.js';
 import { inviteCodesRouter } from './invite-codes.js';
+import { preferencesRouter } from './preferences.js';
 
 export const api = new Hono();
 
@@ -24,3 +25,4 @@ api.route('/providers', providersRouter);
 api.route('/logs', logsRouter);
 api.route('/dashboard', dashboardRouter);
 api.route('/invite-codes', inviteCodesRouter);
+api.route('/settings/preferences', preferencesRouter);

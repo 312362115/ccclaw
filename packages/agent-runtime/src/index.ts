@@ -2,9 +2,24 @@
 // 连接 Server 的 WebSocket，接收任务请求，调用 Agent 执行
 
 import { WebSocket } from 'ws';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { runAgent } from './agent.js';
+import type { AgentDeps } from './agent.js';
 import type { ServerMessage, AgentResponse } from './protocol.js';
+
+// 模块导入
+import { WorkspaceDB } from './workspace-db.js';
+import { ToolRegistry } from './tool-registry.js';
+import { ContextAssembler } from './context-assembler.js';
+import { Consolidator } from './consolidator.js';
+import { LLMClient } from './llm-client.js';
+import { SkillLoader } from './skill-loader.js';
+import { MCPManager } from './mcp-manager.js';
+
+// 内置工具
+import { bashTool, fileTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
+import { createMemoryTools } from './tools/memory.js';
+import { createTodoTools } from './tools/todo.js';
 
 // ====== 环境变量 ======
 
@@ -12,11 +27,85 @@ const RUNNER_ID = process.env.RUNNER_ID;
 const SERVER_URL = process.env.SERVER_URL;
 const AUTH_TOKEN = process.env.AUTH_TOKEN;
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR || '/workspace';
+const INTERNAL_DIR = process.env.INTERNAL_DIR || join(WORKSPACE_DIR, '..', 'internal');
+const WORKSPACE_DB = process.env.WORKSPACE_DB || join(INTERNAL_DIR, 'workspace.db');
+const API_KEY = process.env.API_KEY || '';
 const ALLOWED_PATHS = (process.env.ALLOWED_PATHS || WORKSPACE_DIR).split(':').map(p => resolve(p));
 
 if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
   console.error('缺少必需环境变量: RUNNER_ID, SERVER_URL, AUTH_TOKEN');
   process.exit(1);
+}
+
+// ====== 模块初始化 ======
+
+let agentDeps: AgentDeps | undefined;
+
+function initModules(): void {
+  try {
+    // workspace.db
+    const db = new WorkspaceDB(WORKSPACE_DB);
+
+    // ToolRegistry
+    const toolRegistry = new ToolRegistry();
+
+    // 注册内置工具
+    toolRegistry.register(bashTool);
+    toolRegistry.register(fileTool);
+    toolRegistry.register(gitTool);
+    toolRegistry.register(globTool);
+    toolRegistry.register(grepTool);
+    toolRegistry.register(webFetchTool);
+
+    // 注册 Memory 和 Todo 工具
+    for (const tool of createMemoryTools(db)) toolRegistry.register(tool);
+    for (const tool of createTodoTools(db)) toolRegistry.register(tool);
+
+    // SkillLoader
+    const skillsDir = join(INTERNAL_DIR, 'skills');
+    const skillLoader = new SkillLoader([skillsDir], toolRegistry, WORKSPACE_DIR);
+    skillLoader.loadAll();
+    skillLoader.registerExecutableSkills();
+
+    // ContextAssembler
+    const assembler = new ContextAssembler(db, skillLoader, toolRegistry, WORKSPACE_DIR);
+
+    // LLMClient（需要 API Key）
+    const llmClient = API_KEY
+      ? new LLMClient({ apiKey: API_KEY })
+      : null;
+
+    // Consolidator
+    const consolidator = new Consolidator(
+      db,
+      llmClient
+        ? (params) => llmClient.call({
+            ...params,
+            messages: params.messages.map(m => ({
+              ...m,
+              role: m.role as 'user' | 'assistant' | 'tool',
+            })),
+          })
+        : null,
+    );
+
+    // MCP Manager（从环境变量或配置中获取 MCP servers，当前为空）
+    const mcpManager = new MCPManager([], toolRegistry);
+
+    agentDeps = {
+      db,
+      assembler,
+      toolRegistry,
+      consolidator,
+      llmClient,
+      mcpManager,
+    };
+
+    console.log(`[runner:${RUNNER_ID}] 模块初始化完成: ${toolRegistry.size} 个工具, ${skillLoader.getSkills().length} 个 Skill`);
+  } catch (err) {
+    console.error(`[runner:${RUNNER_ID}] 模块初始化失败:`, err);
+    // 模块初始化失败时仍可启动（echo 模式）
+  }
 }
 
 // ====== 路径白名单安全校验 ======
@@ -120,7 +209,7 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
     sendResponse(requestId, msg);
   };
 
-  await runAgent(request, onStream);
+  await runAgent(request, onStream, agentDeps);
 }
 
 function sendResponse(requestId: string, data: AgentResponse) {
@@ -134,6 +223,9 @@ function sendResponse(requestId: string, data: AgentResponse) {
 function shutdown() {
   console.log(`[runner:${RUNNER_ID}] 正在关闭...`);
   stopHeartbeat();
+  if (agentDeps?.db) {
+    agentDeps.db.close();
+  }
   if (ws?.readyState === WebSocket.OPEN) {
     ws.close(1000, '进程退出');
   }
@@ -146,4 +238,5 @@ process.on('SIGINT', shutdown);
 // ====== 启动 ======
 
 console.log(`[runner:${RUNNER_ID}] 启动，连接 ${SERVER_URL}`);
+initModules();
 connect();

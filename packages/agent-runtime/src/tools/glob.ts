@@ -1,12 +1,19 @@
 import { readdir } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
-import type { Tool } from './index.js';
+import type { Tool } from '../tool-registry.js';
 
 const WORKSPACE = process.env.WORKSPACE_DIR ?? '/workspace';
 
 export const globTool: Tool = {
   name: 'glob',
   description: '按模式搜索文件',
+  schema: {
+    type: 'object',
+    properties: {
+      pattern: { type: 'string', description: '文件匹配模式（如 *.ts、src/**/*.js）' },
+    },
+    required: ['pattern'],
+  },
   async execute(input) {
     const { pattern } = input as { pattern: string };
     // 简单实现：递归列出文件，前端侧用 pattern 过滤

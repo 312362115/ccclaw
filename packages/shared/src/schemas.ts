@@ -109,6 +109,19 @@ export const updateTaskSchema = z.object({
   enabled: z.boolean().optional(),
 });
 
+// User Preferences
+export const updatePreferencesSchema = z.object({
+  language: z.string().max(20).optional(),
+  style: z.string().max(50).optional(),
+  customRules: z.string().max(10000).optional(),
+  agentModel: z.string().max(100).optional(),
+  maxTokens: z.number().int().min(256).max(128000).optional(),
+  contextWindowTokens: z.number().int().min(4096).max(1000000).optional(),
+  temperature: z.number().min(0).max(100).optional(), // integer * 100
+  reasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
+  toolConfirmMode: z.enum(['always', 'smart', 'never']).optional(),
+});
+
 // Chat message
 export const chatMessageSchema = z.object({
   content: z.string().min(1),

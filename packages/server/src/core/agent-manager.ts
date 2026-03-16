@@ -5,6 +5,8 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { runnerManager } from './runner-manager.js';
 import type { AgentRequest, AgentResponse } from './runner-manager.js';
+import { messageBus } from '../bus/instance.js';
+import type { InboundMessage, OutboundMessage } from '../bus/index.js';
 
 interface StreamCallback {
   onDelta: (msg: AgentResponse) => void;
@@ -130,6 +132,50 @@ export class AgentManager {
       else if (msg.type === 'error') callbacks.onError(msg);
       else callbacks.onDelta(msg);
     });
+  }
+
+  /**
+   * 启动 MessageBus 监听 — 消费入站消息，发布出站消息
+   * 在 Server 启动时调用一次
+   */
+  startListening(): void {
+    messageBus.onInbound((msg: InboundMessage) => {
+      if (msg.type === 'user_message') {
+        this.handleInboundMessage(msg).catch((err) => {
+          logger.error(err, `Bus inbound 处理失败: session=${msg.sessionId}`);
+          messageBus.publishOutbound({
+            type: 'error',
+            sessionId: msg.sessionId,
+            message: String(err),
+          });
+        });
+      }
+      // cancel / confirm_response 暂不处理，后续 Task 扩展
+    });
+  }
+
+  private async handleInboundMessage(msg: InboundMessage & { type: 'user_message' }) {
+    const { workspaceId, userId, sessionId, content } = msg;
+
+    const callbacks: StreamCallback = {
+      onDelta: (m) => messageBus.publishOutbound({
+        type: 'text_delta',
+        sessionId,
+        content: String(m.text ?? m.content ?? ''),
+      }),
+      onDone: (m) => messageBus.publishOutbound({
+        type: 'done',
+        sessionId,
+        tokens: (m.tokens as number) ?? 0,
+      }),
+      onError: (m) => messageBus.publishOutbound({
+        type: 'error',
+        sessionId,
+        message: String(m.message ?? '未知错误'),
+      }),
+    };
+
+    await this.chat(workspaceId, userId, sessionId, content, callbacks);
   }
 }
 

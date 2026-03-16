@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
+import { config as dotenvConfig } from 'dotenv';
+import { resolve } from 'node:path';
+
+// 从项目根目录加载 .env
+dotenvConfig({ path: resolve(import.meta.dirname, '../../../.env') });
 
 const envSchema = z.object({
   DB_DIALECT: z.enum(['sqlite', 'postgresql', 'mysql']).default('sqlite'),

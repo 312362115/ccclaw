@@ -1,9 +1,17 @@
 import { execSync } from 'node:child_process';
-import type { Tool } from './index.js';
+import type { Tool } from '../tool-registry.js';
 
 export const grepTool: Tool = {
   name: 'grep',
   description: '在工作区中搜索文本',
+  schema: {
+    type: 'object',
+    properties: {
+      pattern: { type: 'string', description: '搜索正则表达式' },
+      path: { type: 'string', description: '搜索目录，默认 "."' },
+    },
+    required: ['pattern'],
+  },
   async execute(input) {
     const { pattern, path = '.' } = input as { pattern: string; path?: string };
     try {

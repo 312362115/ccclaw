@@ -1,12 +1,12 @@
 import type { IncomingMessage } from 'node:http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { verifyAccessToken } from '../auth/jwt.js';
-import { agentManager } from '../core/agent-manager.js';
 import { db, schema } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
 import { logger } from '../logger.js';
 import { runnerManager } from '../core/runner-manager.js';
-import type { ChannelAdapter } from './adapter.js';
+import { messageBus } from '../bus/instance.js';
+import type { OutboundMessage } from '../bus/index.js';
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -99,29 +99,51 @@ export function createWebSocketHandler(server: import('node:http').Server) {
             return;
           }
 
-          const adapter: ChannelAdapter = {
-            sendDelta: (sid, content) => safeSend(ws, { type: 'text_delta', sessionId: sid, content }),
-            sendToolUse: (sid, tool, input) => safeSend(ws, { type: 'tool_use', sessionId: sid, tool, input }),
-            sendConfirmRequest: (rid, sid, tool, input, reason) => safeSend(ws, { type: 'confirm_request', requestId: rid, sessionId: sid, tool, input, reason }),
-            sendDone: (sid, tokens) => safeSend(ws, { type: 'done', sessionId: sid, tokens }),
-            sendError: (sid, message) => safeSend(ws, { type: 'error', sessionId: sid, message }),
+          // 订阅该 session 的出站消息，转发到 WebSocket
+          const sessionId = msg.sessionId;
+          const outboundHandler = (out: OutboundMessage) => {
+            safeSend(ws, out);
           };
+          messageBus.onSessionOutbound(sessionId, outboundHandler);
 
-          try {
-            await agentManager.chat(
-              msg.workspaceId,
-              ws.userId,
-              msg.sessionId,
-              msg.content,
-              {
-                onDelta: (m) => adapter.sendDelta(msg.sessionId!, String(m.text ?? m.content ?? '')),
-                onDone: (m) => adapter.sendDone(msg.sessionId!, (m.tokens as number) ?? 0),
-                onError: (m) => adapter.sendError(msg.sessionId!, String(m.message ?? '未知错误')),
-              },
-            );
-          } catch (err) {
-            adapter.sendError(msg.sessionId, String(err));
-          }
+          // 监听 done/error 后自动取消订阅
+          const cleanupHandler = (out: OutboundMessage) => {
+            if (out.sessionId === sessionId && (out.type === 'done' || out.type === 'error')) {
+              messageBus.offSessionOutbound(sessionId, outboundHandler);
+              messageBus.offSessionOutbound(sessionId, cleanupHandler);
+            }
+          };
+          messageBus.onSessionOutbound(sessionId, cleanupHandler);
+
+          // 发布入站消息到 Bus
+          messageBus.publishInbound({
+            type: 'user_message',
+            workspaceId: msg.workspaceId,
+            sessionId,
+            userId: ws.userId,
+            channelType: 'webui',
+            content: msg.content,
+          });
+        }
+
+        // 确认响应
+        if (msg.type === 'confirm_response' && msg.workspaceId && msg.sessionId && msg.requestId !== undefined) {
+          messageBus.publishInbound({
+            type: 'confirm_response',
+            workspaceId: msg.workspaceId,
+            sessionId: msg.sessionId,
+            requestId: msg.requestId,
+            approved: msg.approved ?? false,
+          });
+        }
+
+        // 取消请求
+        if (msg.type === 'cancel' && msg.workspaceId && msg.sessionId) {
+          messageBus.publishInbound({
+            type: 'cancel',
+            workspaceId: msg.workspaceId,
+            sessionId: msg.sessionId,
+          });
         }
       } catch (err) {
         logger.error(err, 'WebSocket 消息处理失败');

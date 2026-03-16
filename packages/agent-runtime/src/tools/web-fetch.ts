@@ -1,8 +1,15 @@
-import type { Tool } from './index.js';
+import type { Tool } from '../tool-registry.js';
 
 export const webFetchTool: Tool = {
   name: 'web_fetch',
   description: '获取 URL 内容',
+  schema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', description: '要获取的 URL（仅支持 HTTP/HTTPS）' },
+    },
+    required: ['url'],
+  },
   async execute(input) {
     const { url } = input as { url: string };
 

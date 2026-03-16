@@ -8,6 +8,8 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { createWebSocketHandler } from './channel/webui.js';
 import { runnerManager } from './core/runner-manager.js';
 import { startScheduler } from './core/scheduler.js';
+import { agentManager } from './core/agent-manager.js';
+import { startHeartbeat } from './core/heartbeat.js';
 
 const app = new Hono();
 
@@ -61,11 +63,17 @@ const server = createServer((req, res) => {
 // 挂载 WebSocket（客户端 /ws + Runner /ws/runner）
 createWebSocketHandler(server);
 
+// 启动 AgentManager Bus 监听
+agentManager.startListening();
+
 // 启动 RunnerManager 清理循环
 runnerManager.startCleanupLoop();
 
 // 启动定时任务调度器
 startScheduler();
+
+// 启动 Heartbeat 自主唤醒
+startHeartbeat({ enabled: !!process.env.HEARTBEAT_ENABLED });
 
 server.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'CCCLaw server started');

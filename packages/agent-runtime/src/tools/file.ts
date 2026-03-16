@@ -1,12 +1,21 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
-import type { Tool } from './index.js';
+import type { Tool } from '../tool-registry.js';
 
 const WORKSPACE = process.env.WORKSPACE_DIR ?? '/workspace';
 
 export const fileTool: Tool = {
   name: 'file',
   description: '读写工作区文件',
+  schema: {
+    type: 'object',
+    properties: {
+      action: { type: 'string', description: '操作类型', enum: ['read', 'write'] },
+      path: { type: 'string', description: '相对于工作区的文件路径' },
+      content: { type: 'string', description: '写入内容（action=write 时必填）' },
+    },
+    required: ['action', 'path'],
+  },
   async execute(input) {
     const { action, path, content } = input as { action: 'read' | 'write'; path: string; content?: string };
     const fullPath = resolve(WORKSPACE, path);

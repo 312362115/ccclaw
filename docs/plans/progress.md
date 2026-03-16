@@ -37,25 +37,25 @@
 
 | Task | 名称 | 状态 | 完成时间 | 备注 |
 |------|------|------|---------|------|
-| 21 | workspace.db + 目录分离 | ⬜ 待开始 | | home/internal 分离 + 4 表（sessions/messages/memories/todos） |
-| 22 | Token 估算工具 | ⬜ 待开始 | | 字符数估算，后续可换 tiktoken |
-| 23 | ContextAssembler 上下文组装 | ⬜ 待开始 | | 7 步分级注入 + Bootstrap + 记忆三层 |
-| 24 | Consolidator Token 驱动整合 | ⬜ 待开始 | | 三级降级 + 记忆压缩 |
-| 25 | ToolRegistry 工具注册表 | ⬜ 待开始 | | 内置 + 可执行 Skill + MCP 三层注册 |
-| 26 | Memory 工具 | ⬜ 待开始 | | memory_write/read/search + 分级加载 |
-| 27 | Todo 工具 | ⬜ 待开始 | | todo_read/todo_write → workspace.db |
-| 28 | Agent Loop 重构 | ⬜ 待开始 | | echo → 真实 Agent Loop |
-| 29 | Skill Loader | ⬜ 待开始 | | 三类 Skill（知识/声明式/隐式） + trust + 隐式执行检测 |
-| 30 | MCP Manager 懒连接 | ⬜ 待开始 | | 懒连接 + 30s 超时 + enabledTools |
-| 31 | MessageBus 消息总线 | ⬜ 待开始 | | InboundMessage / OutboundMessage |
-| 32 | 渠道适配器重构 | ⬜ 待开始 | | WebUI Channel 对接 Bus |
-| 33 | LLM 调用容错增强 | ⬜ 待开始 | | 重试/消毒/降级/清洁 |
-| 34 | Skill Loader 增强 | ⬜ 待开始 | | 依赖安装 + runtime 版本检查 + 安全扫描 |
-| 35 | Bootstrap 文件加载 | ⬜ 待开始 | | AGENTS.md/SOUL.md/USER.md/TOOLS.md |
-| 36 | 用户偏好 API + schema 扩展 | ⬜ 待开始 | | 模型参数/工具确认模式/偏好 API |
-| 37 | SubagentManager 子 Agent | ⬜ 待开始 | | 独立工具集 + 15 轮限制 |
-| 38 | Heartbeat 自主唤醒 | ⬜ 待开始 | | HEARTBEAT.md + LLM 决策 |
-| 39 | 全链路集成验证 | ⬜ 待开始 | | typecheck + 单元测试 + 手动测试 |
+| 21 | workspace.db + 目录分离 | ✅ 完成 | 2026-03-16 | home/internal 分离 + 4 表 + 26 测试通过 |
+| 22 | Token 估算工具 | ✅ 完成 | 2026-03-16 | estimateTokens/Messages/Session + 9 测试通过 |
+| 23 | ContextAssembler 上下文组装 | ✅ 完成 | 2026-03-16 | 7 步分级注入 + Bootstrap + 记忆三层 + ISkillLoader 接口 + 10 测试通过 |
+| 24 | Consolidator Token 驱动整合 | ✅ 完成 | 2026-03-16 | 三级降级归档 + 记忆压缩 + pickBoundary + 11 测试通过 |
+| 25 | ToolRegistry 工具注册表 | ✅ 完成 | 2026-03-16 | 三层注册 + castParams + 6 个内置工具补 schema + 16 测试通过 |
+| 26 | Memory 工具 | ✅ 完成 | 2026-03-16 | memory_write/read/search + 分级索引 + 7 测试通过 |
+| 27 | Todo 工具 | ✅ 完成 | 2026-03-16 | todo_read/todo_write 全量替换 + 5 测试通过 |
+| 28 | Agent Loop 重构 | ✅ 完成 | 2026-03-16 | echo → 真实 Agent Loop + index.ts 全模块初始化 + 143 测试通过 |
+| 29 | Skill Loader | ✅ 完成 | 2026-03-16 | 三类分类 + frontmatter 解析 + requires 检查 + 工具注册 + 17 测试通过 |
+| 30 | MCP Manager 懒连接 | ✅ 完成 | 2026-03-16 | 幂等懒连接 + 三种传输 + enabledTools 白名单 + 5 测试通过 |
+| 31 | MessageBus 消息总线 | ✅ 完成 | 2026-03-16 | EventEmitter + Inbound/Outbound + session 过滤 + 6 测试通过 |
+| 32 | 渠道适配器重构 | ✅ 完成 | 2026-03-16 | WebUI → Bus 发布/订阅 + AgentManager.startListening + 143 测试通过 |
+| 33 | LLM 调用容错增强 | ✅ 完成 | 2026-03-16 | LLMClient + 指数退避重试 + 空内容消毒 + 16 测试通过 |
+| 34 | Skill Loader 增强 | ✅ 完成 | 2026-03-16 | installDeps + scanSecurity + 高风险模式检测 + 10 新测试通过 |
+| 35 | Bootstrap 文件加载 | ✅ 完成 | 2026-03-16 | 边界测试（空文件/多文件顺序/目录不存在/压缩记忆）+ 4 新测试通过 |
+| 36 | 用户偏好 API + schema 扩展 | ✅ 完成 | 2026-03-16 | DB 三方言 +6 字段 + Zod schema + GET/PUT API |
+| 37 | SubagentManager 子 Agent | ✅ 完成 | 2026-03-16 | 独立 ToolRegistry + spawn 工具 + 15 轮/3 并发限制 + 6 测试通过 |
+| 38 | Heartbeat 自主唤醒 | ✅ 完成 | 2026-03-16 | cron 扫描 + LLM 决策 + SKIP 机制 + server 集成 |
+| 39 | 全链路集成验证 | ✅ 完成 | 2026-03-16 | 4 包 typecheck + 166 测试全部通过 |
 
 ## 当前阻塞 / 待决策
 
@@ -83,3 +83,13 @@
 - 2026-03-16：分析 nanobot 架构，更新设计文档（十一.5~十一.9），制定 P5 计划（Task 21-35）
 - 2026-03-16：二次分析 nanobot，补充设计文档（十一.10~十一.12 LLM容错/Skill增强/Bootstrap），细化用户设置配置项，扩展 P5 计划（Task 33-39）
 - 2026-03-16：设计迭代 — todos.json→DB、记忆分级加载、Skill合并Tool（command+trust+依赖管理+五层安全）、目录分离（home/internal）、上下文7步组装、隐式执行检测。P5 计划 v2 重写
+- 2026-03-16：Task 21 完成，workspace.db + home/internal 目录分离 + nanoid 迁移
+- 2026-03-16：Task 22 + 25 完成，token-estimator + ToolRegistry + 6 个内置工具补 schema（4 包 typecheck 通过，51 测试通过）
+- 2026-03-16：Task 26 + 27 完成，Memory 工具（write/read/search）+ Todo 工具（read/write 全量替换）（63 测试通过）
+- 2026-03-16：Task 23 + 24 + 33 完成，ContextAssembler（7 步组装）+ Consolidator（Token 驱动整合+记忆压缩）+ LLMClient（重试+消毒）（100 测试通过）
+- 2026-03-16：Task 29 + 30 + 31 完成，SkillLoader（三类分类+frontmatter+requires）+ MCPManager（懒连接+三种传输）+ MessageBus（EventEmitter+session过滤）（143 测试通过）
+- 2026-03-16：Task 28 + 32 完成，Agent Loop 重构（echo→真实LLM循环+全模块初始化）+ 渠道适配器重构（WebUI→Bus发布/订阅+AgentManager.startListening）（143 测试通过）
+- 2026-03-16：Task 34 + 35 完成，SkillLoader 增强（installDeps+scanSecurity+高风险模式检测）+ Bootstrap 边界测试（157 测试通过）
+- 2026-03-16：Task 36 + 37 + 38 完成，用户偏好 API（DB+Zod+路由）+ SubagentManager（spawn工具+并发/迭代限制）+ Heartbeat 自主唤醒（163 测试通过）
+- 2026-03-16：Task 39 完成，全链路集成验证 — 4 包 typecheck 通过 + 166 测试全部通过
+- 2026-03-16：**P5 全部 19 个 Task (21-39) 完成** 🎉
