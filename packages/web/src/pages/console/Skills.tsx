@@ -39,9 +39,18 @@ export function Skills() {
 
       {showForm && (
         <form onSubmit={handleCreate} style={{ background: '#f9f9f9', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-          <input placeholder="名称" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
-          <input placeholder="描述" value={description} onChange={(e) => setDescription(e.target.value)} required style={inputStyle} />
-          <textarea placeholder="技能内容（Markdown）" value={content} onChange={(e) => setContent(e.target.value)} required rows={6} style={{ ...inputStyle, resize: 'vertical' }} />
+          <div style={fieldStyle}>
+            <label style={labelStyle}>名称</label>
+            <input placeholder="如：合同分析" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
+          </div>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>描述</label>
+            <input placeholder="简要说明技能用途" value={description} onChange={(e) => setDescription(e.target.value)} required style={inputStyle} />
+          </div>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>技能内容（Markdown）</label>
+            <textarea placeholder="在此编写技能提示词..." value={content} onChange={(e) => setContent(e.target.value)} required rows={6} style={{ ...inputStyle, resize: 'vertical' }} />
+          </div>
           <button type="submit" style={btnStyle}>保存</button>
         </form>
       )}
@@ -75,6 +84,8 @@ export function Skills() {
 }
 
 const btnStyle: React.CSSProperties = { padding: '6px 16px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14 };
-const inputStyle: React.CSSProperties = { display: 'block', width: '100%', padding: '6px 10px', marginBottom: 8, border: '1px solid #ddd', borderRadius: 4, fontSize: 14, boxSizing: 'border-box' };
+const fieldStyle: React.CSSProperties = { marginBottom: 12 };
+const labelStyle: React.CSSProperties = { display: 'block', marginBottom: 4, fontSize: 13, fontWeight: 500, color: '#333' };
+const inputStyle: React.CSSProperties = { display: 'block', width: '100%', padding: '6px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 14, boxSizing: 'border-box' };
 const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 12px', fontSize: 13, color: '#666' };
 const tdStyle: React.CSSProperties = { padding: '8px 12px', fontSize: 14 };

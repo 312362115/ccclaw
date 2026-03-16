@@ -40,43 +40,27 @@ export function Login() {
         <h1 style={{ textAlign: 'center', marginBottom: 24 }}>CCCLaw</h1>
 
         {mode === 'register' && (
-          <input
-            type="text"
-            placeholder="姓名"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            style={inputStyle}
-          />
+          <div style={fieldStyle}>
+            <label style={labelStyle}>姓名</label>
+            <input type="text" placeholder="请输入姓名" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
+          </div>
         )}
 
-        <input
-          type="email"
-          placeholder="邮箱"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          style={inputStyle}
-        />
+        <div style={fieldStyle}>
+          <label style={labelStyle}>邮箱</label>
+          <input type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required style={inputStyle} />
+        </div>
 
-        <input
-          type="password"
-          placeholder="密码"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={inputStyle}
-        />
+        <div style={fieldStyle}>
+          <label style={labelStyle}>密码</label>
+          <input type="password" placeholder="请输入密码" value={password} onChange={(e) => setPassword(e.target.value)} required style={inputStyle} />
+        </div>
 
         {mode === 'register' && (
-          <input
-            type="text"
-            placeholder="邀请码"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-            required
-            style={inputStyle}
-          />
+          <div style={fieldStyle}>
+            <label style={labelStyle}>邀请码</label>
+            <input type="text" placeholder="请输入邀请码" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} required style={inputStyle} />
+          </div>
         )}
 
         {error && <p style={{ color: 'red', fontSize: 14 }}>{error}</p>}
@@ -97,8 +81,10 @@ export function Login() {
   );
 }
 
+const fieldStyle: React.CSSProperties = { marginBottom: 12 };
+const labelStyle: React.CSSProperties = { display: 'block', marginBottom: 4, fontSize: 13, fontWeight: 500, color: '#333' };
 const inputStyle: React.CSSProperties = {
-  display: 'block', width: '100%', padding: '8px 12px', marginBottom: 12,
+  display: 'block', width: '100%', padding: '8px 12px',
   border: '1px solid #ddd', borderRadius: 4, fontSize: 14, boxSizing: 'border-box',
 };
 
