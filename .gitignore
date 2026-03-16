@@ -7,3 +7,4 @@ dist/
 nanobot/
 data/
 .history/
+.playwright-mcp
