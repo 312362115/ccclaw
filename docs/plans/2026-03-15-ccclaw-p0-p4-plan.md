@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Hono, Drizzle, PostgreSQL/MySQL/SQLite, Docker (dockerode), ws, React, Vite, pino, jose, zod, bcryptjs, node-cron, p-queue, mysql2
 
-**Spec:** `docs/specs/2026-03-15-ccclaw-design.md`
+**Spec:** `docs/specs/system-design/2026-03-15-ccclaw-design.md`
 
 ---
 

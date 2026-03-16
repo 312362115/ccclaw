@@ -2,7 +2,7 @@
 
 > 跨会话进度跟踪文件，每完成一个 Task 更新状态。
 > 计划文档：`docs/plans/2026-03-15-ccclaw-p0-p4-plan.md`
-> 设计文档：`docs/specs/2026-03-15-ccclaw-design.md`
+> 设计文档：`docs/specs/system-design/2026-03-15-ccclaw-design.md`
 
 ## 进度总览
 
@@ -30,6 +30,33 @@
 | 19.5 | Chunk 4 中间验证 + 单元测试 | ✅ 完成 | 2026-03-16 | 4 包 typecheck 通过 + 18 测试通过（password + crypto + tool-guard） |
 | 20 | Docker 生产部署 | ✅ 完成 | 2026-03-16 | server.Dockerfile（多阶段构建）+ .dockerignore |
 
+## P5 — Agent Runtime 增强（计划中）
+
+> 计划文档：`docs/plans/2026-03-16-ccclaw-p5-plan.md`
+> 借鉴 nanobot 的成熟模式，补齐 Agent Runtime 核心模块。
+
+| Task | 名称 | 状态 | 完成时间 | 备注 |
+|------|------|------|---------|------|
+| 21 | workspace.db + 目录分离 | ⬜ 待开始 | | home/internal 分离 + 4 表（sessions/messages/memories/todos） |
+| 22 | Token 估算工具 | ⬜ 待开始 | | 字符数估算，后续可换 tiktoken |
+| 23 | ContextAssembler 上下文组装 | ⬜ 待开始 | | 7 步分级注入 + Bootstrap + 记忆三层 |
+| 24 | Consolidator Token 驱动整合 | ⬜ 待开始 | | 三级降级 + 记忆压缩 |
+| 25 | ToolRegistry 工具注册表 | ⬜ 待开始 | | 内置 + 可执行 Skill + MCP 三层注册 |
+| 26 | Memory 工具 | ⬜ 待开始 | | memory_write/read/search + 分级加载 |
+| 27 | Todo 工具 | ⬜ 待开始 | | todo_read/todo_write → workspace.db |
+| 28 | Agent Loop 重构 | ⬜ 待开始 | | echo → 真实 Agent Loop |
+| 29 | Skill Loader | ⬜ 待开始 | | 三类 Skill（知识/声明式/隐式） + trust + 隐式执行检测 |
+| 30 | MCP Manager 懒连接 | ⬜ 待开始 | | 懒连接 + 30s 超时 + enabledTools |
+| 31 | MessageBus 消息总线 | ⬜ 待开始 | | InboundMessage / OutboundMessage |
+| 32 | 渠道适配器重构 | ⬜ 待开始 | | WebUI Channel 对接 Bus |
+| 33 | LLM 调用容错增强 | ⬜ 待开始 | | 重试/消毒/降级/清洁 |
+| 34 | Skill Loader 增强 | ⬜ 待开始 | | 依赖安装 + runtime 版本检查 + 安全扫描 |
+| 35 | Bootstrap 文件加载 | ⬜ 待开始 | | AGENTS.md/SOUL.md/USER.md/TOOLS.md |
+| 36 | 用户偏好 API + schema 扩展 | ⬜ 待开始 | | 模型参数/工具确认模式/偏好 API |
+| 37 | SubagentManager 子 Agent | ⬜ 待开始 | | 独立工具集 + 15 轮限制 |
+| 38 | Heartbeat 自主唤醒 | ⬜ 待开始 | | HEARTBEAT.md + LLM 决策 |
+| 39 | 全链路集成验证 | ⬜ 待开始 | | typecheck + 单元测试 + 手动测试 |
+
 ## 当前阻塞 / 待决策
 
 （无）
@@ -53,3 +80,6 @@
 - 2026-03-16：Task 19+19.5 完成，定时任务调度 + 全量验证（4 包 typecheck + 18 测试）
 - 2026-03-16：Task 20 完成，Docker 生产部署配置
 - 2026-03-16：全部 20 个 Task 完成
+- 2026-03-16：分析 nanobot 架构，更新设计文档（十一.5~十一.9），制定 P5 计划（Task 21-35）
+- 2026-03-16：二次分析 nanobot，补充设计文档（十一.10~十一.12 LLM容错/Skill增强/Bootstrap），细化用户设置配置项，扩展 P5 计划（Task 33-39）
+- 2026-03-16：设计迭代 — todos.json→DB、记忆分级加载、Skill合并Tool（command+trust+依赖管理+五层安全）、目录分离（home/internal）、上下文7步组装、隐式执行检测。P5 计划 v2 重写
