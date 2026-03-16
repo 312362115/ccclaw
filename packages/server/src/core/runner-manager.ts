@@ -149,8 +149,8 @@ export class RunnerManager {
         CpuQuota: SANDBOX_CPU_QUOTA,
         Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=100m' },
         Binds: [
-          `${paths.workspace}:/workspace`,
-          `${paths.memory}:/memory`,
+          `${paths.home}:/workspace`,
+          `${paths.internal}:/internal`,
           `${paths.skills}:/skills:ro`,
         ],
         NetworkMode: 'bridge',
@@ -161,7 +161,9 @@ export class RunnerManager {
         `SERVER_URL=${serverUrl}`,
         `AUTH_TOKEN=${config.RUNNER_SECRET}`,
         `WORKSPACE_DIR=/workspace`,
-        `ALLOWED_PATHS=/workspace:/memory:/skills`,
+        `INTERNAL_DIR=/internal`,
+        `WORKSPACE_DB=/internal/workspace.db`,
+        `ALLOWED_PATHS=/workspace:/skills:/internal/workspace.db`,
       ],
     });
 
@@ -180,7 +182,7 @@ export class RunnerManager {
       join(process.cwd(), 'node_modules/@ccclaw/agent-runtime/dist/index.js'),
       ['--mode', 'runner'],
       {
-        cwd: paths.workspace,
+        cwd: paths.home,
         env: {
           ...safeEnv,
           RUNNER_ID: runnerId,

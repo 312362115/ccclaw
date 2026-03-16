@@ -11,50 +11,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export async function initWorkspaceStorage(slug: string, gitRepo?: string | null, gitToken?: string | null) {
   const base = join(config.DATA_DIR, 'workspaces', slug);
-  const workDir = join(base, 'workspace');
-  const skillsDir = join(base, 'skills');
-  await mkdir(workDir, { recursive: true });
+  const homeDir = join(base, 'home');
+  const internalDir = join(base, 'internal');
+  const skillsDir = join(internalDir, 'skills');
+  const skillCacheDir = join(internalDir, 'skill-cache');
+  await mkdir(homeDir, { recursive: true });
+  await mkdir(internalDir, { recursive: true });
   await mkdir(skillsDir, { recursive: true });
+  await mkdir(skillCacheDir, { recursive: true });
 
   // 目录权限：owner 读写执行
   await chmod(base, 0o700);
 
-  // 初始化 workspace.db（SQLite + WAL，包含 sessions + messages + memories）
-  const wsDbPath = join(base, 'workspace.db');
+  // 初始化 workspace.db（SQLite + WAL）
+  // WorkspaceDB 类（agent-runtime）负责完整 schema，此处仅确保文件可创建
+  const wsDbPath = join(internalDir, 'workspace.db');
   const wsDb = new Database(wsDbPath);
   wsDb.pragma('journal_mode = WAL');
   wsDb.pragma('foreign_keys = ON');
-  wsDb.exec(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY,
-      workspace_id TEXT NOT NULL,
-      user_id TEXT NOT NULL,
-      channel_type TEXT NOT NULL DEFAULT 'webui',
-      title TEXT NOT NULL DEFAULT '新会话',
-      status TEXT NOT NULL DEFAULT 'active',
-      summary TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      tool_calls TEXT,
-      tokens INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS memories (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      type TEXT NOT NULL CHECK(type IN ('project','reference','decision','feedback','log')),
-      content TEXT NOT NULL,
-      embedding BLOB,
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
   wsDb.close();
 
   // 复制系统预置 Skill 到工作区
@@ -78,7 +52,7 @@ export async function initWorkspaceStorage(slug: string, gitRepo?: string | null
       url.password = gitToken;
       cloneUrl = url.toString();
     }
-    await execFileAsync('git', ['clone', cloneUrl, '.'], { cwd: workDir });
+    await execFileAsync('git', ['clone', cloneUrl, '.'], { cwd: homeDir });
   }
 }
 
@@ -90,9 +64,10 @@ export function getWorkspacePaths(slug: string) {
   const base = join(config.DATA_DIR, 'workspaces', slug);
   return {
     base,
-    workspace: join(base, 'workspace'),
-    memory: join(base, 'memory'),
-    skills: join(base, 'skills'),
+    home: join(base, 'home'),
+    internal: join(base, 'internal'),
+    skills: join(base, 'internal', 'skills'),
+    wsDb: join(base, 'internal', 'workspace.db'),
   };
 }
 
@@ -134,7 +109,9 @@ export function buildSafeEnv(workspaceSlug: string): Record<string, string> {
     PATH: process.env.PATH || '',
     HOME: process.env.HOME || '',
     SOCKET_PATH: join(paths.base, 'agent.sock'),
-    WORKSPACE_DIR: paths.workspace,
-    ALLOWED_PATHS: [paths.workspace, paths.memory, paths.skills].join(':'),
+    WORKSPACE_DIR: paths.home,
+    INTERNAL_DIR: paths.internal,
+    WORKSPACE_DB: paths.wsDb,
+    ALLOWED_PATHS: [paths.home, paths.skills, paths.wsDb].join(':'),
   };
 }
