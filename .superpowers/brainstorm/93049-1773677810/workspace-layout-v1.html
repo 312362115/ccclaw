@@ -1,0 +1,84 @@
+<h2>工作区驱动的 Agent 工作台</h2>
+<p class="subtitle">这版只讨论信息架构，不讨论视觉风格。目标是确认“左工作区 / 中对话 / 右资源”的骨架是否对。</p>
+
+<div class="section" style="display:grid;gap:20px">
+  <div class="card" data-choice="layout-a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. 稳定三栏</div>
+        <div class="mockup-body" style="display:grid;grid-template-columns:220px 1fr 320px;min-height:420px;padding:0">
+          <div style="border-right:1px solid #ddd;padding:16px;background:#fafafa">
+            <div class="label">工作区</div>
+            <div class="mock-sidebar" style="min-height:320px">Workspace A<br/>Workspace B<br/>Workspace C<br/><br/>最近会话<br/>任务记录</div>
+          </div>
+          <div style="border-right:1px solid #ddd;padding:16px">
+            <div class="label">Agent 对话</div>
+            <div class="mock-content" style="min-height:320px">对话流<br/><br/>用户提问<br/>Agent 回复<br/>工具调用状态<br/>底部输入框</div>
+          </div>
+          <div style="padding:16px;background:#fcfcfc">
+            <div class="label">工作区侧栏</div>
+            <div class="mock-sidebar" style="min-height:320px">文件树<br/>运行产物<br/>日志<br/>上下文资源</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>稳定三栏</h3>
+      <p>最符合你刚才描述。工作区切换常驻左侧，文件和资源常驻右侧，中间始终是对话主轴。</p>
+    </div>
+  </div>
+  <div class="card" data-choice="layout-b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. 三栏 + 右侧标签页</div>
+        <div class="mockup-body" style="display:grid;grid-template-columns:220px 1fr 320px;min-height:420px;padding:0">
+          <div style="border-right:1px solid #ddd;padding:16px;background:#fafafa">
+            <div class="label">工作区</div>
+            <div class="mock-sidebar" style="min-height:320px">Workspace A<br/>Workspace B<br/>Workspace C</div>
+          </div>
+          <div style="border-right:1px solid #ddd;padding:16px">
+            <div class="label">Agent 对话</div>
+            <div class="mock-content" style="min-height:320px">对话流<br/>计划<br/>执行进度<br/>底部输入框</div>
+          </div>
+          <div style="padding:16px;background:#fcfcfc">
+            <div class="label">右侧标签</div>
+            <div class="mock-nav">文件 | 任务 | 预览</div>
+            <div class="mock-sidebar" style="min-height:280px;margin-top:12px">当前选中标签内容</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>右侧可切换面板</h3>
+      <p>保留三栏，但右栏不是单一文件管理，而是文件/任务/预览等多视图容器。</p>
+    </div>
+  </div>
+  <div class="card" data-choice="layout-c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. 左侧双层导航</div>
+        <div class="mockup-body" style="display:grid;grid-template-columns:84px 220px 1fr 300px;min-height:420px;padding:0">
+          <div style="border-right:1px solid #ddd;padding:12px;background:#f4f4f4">
+            <div class="mock-sidebar" style="min-height:320px">Chat<br/>Files<br/>Tasks<br/>Logs</div>
+          </div>
+          <div style="border-right:1px solid #ddd;padding:16px;background:#fafafa">
+            <div class="label">工作区</div>
+            <div class="mock-sidebar" style="min-height:320px">Workspace A<br/>Workspace B<br/>Workspace C</div>
+          </div>
+          <div style="border-right:1px solid #ddd;padding:16px">
+            <div class="label">主内容</div>
+            <div class="mock-content" style="min-height:320px">当前模块内容</div>
+          </div>
+          <div style="padding:16px;background:#fcfcfc">
+            <div class="label">上下文</div>
+            <div class="mock-sidebar" style="min-height:320px">文件/运行状态</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>更像 IDE</h3>
+      <p>扩展性强，但主轴会从“对话驱动”偏向“模块驱动”，可能偏离你想要的产品核心。</p>
+    </div>
+  </div>
+</div>
