@@ -6,7 +6,7 @@ import { eq, and, lte } from 'drizzle-orm';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { agentManager } from './agent-manager.js';
-import { randomUUID } from 'node:crypto';
+import { nanoid } from '@ccclaw/shared';
 
 const queue = new PQueue({ concurrency: config.SCHEDULER_CONCURRENCY });
 
@@ -55,8 +55,8 @@ async function scanAndDispatch() {
  * 执行单个定时任务
  */
 async function executeTask(task: any) {
-  const sessionId = `sched-${randomUUID()}`;
-  const runId = randomUUID();
+  const sessionId = `sched-${nanoid()}`;
+  const runId = nanoid();
 
   // 记录 task_run
   await db.insert(schema.taskRuns).values({

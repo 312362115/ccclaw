@@ -505,7 +505,7 @@ packages/
     }): Promise<AssembledContext> {
       const parts: string[] = [];
 
-      // 1. Bootstrap 文件（home/ 目录下 AGENTS.md → SOUL.md → USER.md → TOOLS.md）
+      // 1. Bootstrap 文件（home/.ccclaw/ 目录下 AGENTS.md → SOUL.md → USER.md → TOOLS.md）
       parts.push(this.loadBootstrapFiles());
 
       // 2. 用户偏好 → system prompt
@@ -545,7 +545,7 @@ packages/
       const files = ['AGENTS.md', 'SOUL.md', 'USER.md', 'TOOLS.md'];
       const parts: string[] = [];
       for (const file of files) {
-        const path = join(this.homeDir, file);
+        const path = join(this.homeDir, '.ccclaw', file);
         try {
           const content = readFileSync(path, 'utf-8');
           parts.push(`## ${file}\n${content}`);
@@ -1122,7 +1122,7 @@ packages/
   - 验证记忆分级注入（decision 全文 + project 索引）
   - 验证上下文整合（大量消息后 lastConsolidated 前进）
   - 放入 SKILL.md（含 command）→ 验证可执行 Skill 注册和调用
-  - 放入 AGENTS.md → 验证 Bootstrap 加载
+  - 放入 .ccclaw/AGENTS.md → 验证 Bootstrap 加载
   - 配置 MCP Server → 验证懒连接和工具注入
 
 - [ ] **Step 4: 更新 progress.md**

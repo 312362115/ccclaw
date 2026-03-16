@@ -192,10 +192,11 @@ packages/agent-runtime/
 │   └── {workspace-slug}/
 │       ├── home/                   # ══ 用户代码区（Agent 工作目录）══
 │       │   ├── .git/              # Git 仓库（如果配置了 gitRepo）
-│       │   ├── AGENTS.md          # Bootstrap 文件（可选，用户维护，git 可追踪）
-│       │   ├── SOUL.md            # Bootstrap 文件（可选）
-│       │   ├── USER.md            # Bootstrap 文件（可选）
-│       │   ├── TOOLS.md           # Bootstrap 文件（可选）
+│       │   ├── .ccclaw/           # CCCLaw 配置目录（Bootstrap 文件等）
+│       │   │   ├── AGENTS.md      # Bootstrap 文件（可选，用户维护，git 可追踪）
+│       │   │   ├── SOUL.md        # Bootstrap 文件（可选）
+│       │   │   ├── USER.md        # Bootstrap 文件（可选）
+│       │   │   └── TOOLS.md       # Bootstrap 文件（可选）
 │       │   ├── src/...            # 用户项目代码
 │       │   └── ...
 │       └── internal/               # ══ 系统数据区（CCCLaw 管理，用户不直接操作）══
@@ -246,7 +247,8 @@ WORKSPACE_DB=/internal/workspace.db
 
 ### Bootstrap 文件位置说明
 
-Bootstrap 文件（`AGENTS.md`、`SOUL.md`、`USER.md`、`TOOLS.md`）放在 `home/` 根目录，原因：
+Bootstrap 文件（`AGENTS.md`、`SOUL.md`、`USER.md`、`TOOLS.md`）放在 `home/.ccclaw/` 目录，原因：
+- 不污染用户仓库根目录，`.ccclaw/` 隐藏目录与用户代码分离
 - 属于用户维护的内容（定义 Agent 人格和规范）
 - 可以跟随 Git 版本控制（团队共享同一份 Agent 规范）
 - Agent 可以通过文件工具自我更新
@@ -939,7 +941,7 @@ requires:
 | `TOOLS.md` | 工具使用指南（特定工具的使用约束和最佳实践） | 低 |
 
 **加载规则**：
-- 文件放在工作区 `workspace/` 根目录
+- 文件放在工作区 `home/.ccclaw/` 目录（不污染仓库根目录）
 - 存在即加载，不存在则跳过
 - 每个文件包裹为 `## {filename}` 章节，用 `---` 分隔
 - 用户可在 WebUI 的工作区设置中编辑（本质是文件操作）

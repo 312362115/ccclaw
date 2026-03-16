@@ -23,7 +23,7 @@
 每次 Agent 调用时，按以下顺序组装上下文：
 
 ```
-1. Bootstrap 文件    ← home/ 目录下的 AGENTS.md / SOUL.md / USER.md / TOOLS.md（Runner 启动时加载）
+1. Bootstrap 文件    ← home/.ccclaw/ 目录下的 AGENTS.md / SOUL.md / USER.md / TOOLS.md（Runner 启动时加载）
 2. 用户偏好          ← 主数据库 user_preferences 表（Server 读取，传给 Runner）
 3. 工作区记忆（分级） ← workspace.db memories 表（Runner 本地读取）
    A. 必注入层：decision + feedback → 全文内联（行为约束，Agent 必须始终知道）

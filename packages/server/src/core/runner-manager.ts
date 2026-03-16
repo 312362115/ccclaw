@@ -1,7 +1,8 @@
 import Docker from 'dockerode';
-import { fork, type ChildProcess } from 'node:child_process';
+import { fork } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { nanoid } from '@ccclaw/shared';
 import { WebSocket } from 'ws';
 import { db, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
@@ -175,7 +176,7 @@ export class RunnerManager {
     const safeEnv = buildSafeEnv(slug);
     const serverUrl = `ws://127.0.0.1:${config.PORT}/ws/runner`;
 
-    const child = fork(
+    const child: ChildProcess = fork(
       join(process.cwd(), 'node_modules/@ccclaw/agent-runtime/dist/index.js'),
       ['--mode', 'runner'],
       {
@@ -186,15 +187,17 @@ export class RunnerManager {
           SERVER_URL: serverUrl,
           AUTH_TOKEN: config.RUNNER_SECRET,
         },
-        stdio: 'pipe',
       },
-    );
+    ) as ChildProcess;
 
-    child.on('exit', (code) => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    (child as any).on('exit', (code: number | null) => {
       logger.warn({ slug, runnerId, code }, 'Local Runner exited');
       this.runners.delete(runnerId);
     });
 
+    const info = this.runners.get(runnerId);
+    if (info) info.childProcess = child;
     logger.info({ slug, runnerId, pid: child.pid }, 'Local Runner started');
   }
 
@@ -226,7 +229,7 @@ export class RunnerManager {
       throw new Error(`Runner ${runnerId} 不在线`);
     }
 
-    const requestId = randomUUID();
+    const requestId = nanoid();
 
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {

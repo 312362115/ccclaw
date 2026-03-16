@@ -1,9 +1,10 @@
 import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { nanoid } from '@ccclaw/shared';
 
 // SQLite 没有 enum / uuid / jsonb，全部用 text 替代
-// id 默认值通过应用层 crypto.randomUUID() 生成
+// id 默认值通过应用层 nanoid() 生成
 
-const id = () => text('id').primaryKey().$defaultFn(() => crypto.randomUUID());
+const id = () => text('id').primaryKey().$defaultFn(() => nanoid());
 const createdAt = () => text('created_at').notNull().$defaultFn(() => new Date().toISOString());
 
 export const users = sqliteTable('users', {

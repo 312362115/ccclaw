@@ -1,9 +1,10 @@
-import { mysqlTable, varchar, text, boolean, timestamp, json, int, uniqueIndex, mysqlEnum, char } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, boolean, timestamp, json, int, uniqueIndex, mysqlEnum } from 'drizzle-orm/mysql-core';
 import { SYSTEM_ROLES, SESSION_STATUSES, MEMORY_TYPES, TASK_RUN_STATUSES } from './schema.types.js';
+import { nanoid } from '@ccclaw/shared';
 
-// MySQL: 使用 CHAR(36) 存 UUID，native ENUM，JSON 类型
+// MySQL: 使用 VARCHAR(21) 存 nanoid，native ENUM，JSON 类型
 
-const id = () => char('id', { length: 36 }).primaryKey().$defaultFn(() => crypto.randomUUID());
+const id = () => varchar('id', { length: 21 }).primaryKey().$defaultFn(() => nanoid());
 const createdAt = () => timestamp('created_at').notNull().defaultNow();
 
 export const users = mysqlTable('users', {
@@ -18,7 +19,7 @@ export const users = mysqlTable('users', {
 
 export const userPreferences = mysqlTable('user_preferences', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }).unique(),
   language: varchar('language', { length: 20 }),
   style: varchar('style', { length: 50 }),
   customRules: text('custom_rules'),
@@ -29,7 +30,7 @@ export const workspaces = mysqlTable('workspaces', {
   id: id(),
   name: varchar('name', { length: 100 }).notNull(),
   slug: varchar('slug', { length: 50 }).notNull().unique(),
-  createdBy: char('created_by', { length: 36 }).notNull().references(() => users.id),
+  createdBy: varchar('created_by', { length: 21 }).notNull().references(() => users.id),
   gitRepo: varchar('git_repo', { length: 500 }),
   settings: json('settings').notNull().default({}),
   createdAt: createdAt(),
@@ -37,7 +38,7 @@ export const workspaces = mysqlTable('workspaces', {
 
 export const providers = mysqlTable('providers', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   type: varchar('type', { length: 50 }).notNull().default('claude'),
   authType: varchar('auth_type', { length: 20 }).notNull().default('api_key'),
@@ -51,8 +52,8 @@ export const providers = mysqlTable('providers', {
 
 export const skills = mysqlTable('skills', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  workspaceId: char('workspace_id', { length: 36 }).references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  workspaceId: varchar('workspace_id', { length: 21 }).references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   description: varchar('description', { length: 500 }).notNull(),
   content: text('content').notNull(),
@@ -61,8 +62,8 @@ export const skills = mysqlTable('skills', {
 
 export const mcpServers = mysqlTable('mcp_servers', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  workspaceId: char('workspace_id', { length: 36 }).references(() => workspaces.id, { onDelete: 'cascade' }),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  workspaceId: varchar('workspace_id', { length: 21 }).references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   command: varchar('command', { length: 500 }).notNull(),
   args: json('args').notNull().default([]),
@@ -73,7 +74,7 @@ export const mcpServers = mysqlTable('mcp_servers', {
 
 export const scheduledTasks = mysqlTable('scheduled_tasks', {
   id: id(),
-  workspaceId: char('workspace_id', { length: 36 }).notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
+  workspaceId: varchar('workspace_id', { length: 21 }).notNull().references(() => workspaces.id, { onDelete: 'cascade' }),
   name: varchar('name', { length: 100 }).notNull(),
   cron: varchar('cron', { length: 100 }).notNull(),
   prompt: text('prompt').notNull(),
@@ -84,8 +85,8 @@ export const scheduledTasks = mysqlTable('scheduled_tasks', {
 
 export const taskRuns = mysqlTable('task_runs', {
   id: id(),
-  taskId: char('task_id', { length: 36 }).notNull().references(() => scheduledTasks.id, { onDelete: 'cascade' }),
-  sessionId: char('session_id', { length: 36 }).notNull(), // workspace.db 中的 session，不做 FK
+  taskId: varchar('task_id', { length: 21 }).notNull().references(() => scheduledTasks.id, { onDelete: 'cascade' }),
+  sessionId: varchar('session_id', { length: 21 }).notNull(), // workspace.db 中的 session，不做 FK
   status: mysqlEnum('status', TASK_RUN_STATUSES).notNull().default('running'),
   startedAt: timestamp('started_at').notNull().defaultNow(),
   finishedAt: timestamp('finished_at'),
@@ -94,7 +95,7 @@ export const taskRuns = mysqlTable('task_runs', {
 
 export const auditLogs = mysqlTable('audit_logs', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id),
   action: varchar('action', { length: 100 }).notNull(),
   target: varchar('target', { length: 255 }).notNull(),
   detail: json('detail'),
@@ -105,8 +106,8 @@ export const auditLogs = mysqlTable('audit_logs', {
 export const inviteCodes = mysqlTable('invite_codes', {
   id: id(),
   code: varchar('code', { length: 20 }).notNull().unique(),
-  createdBy: char('created_by', { length: 36 }).notNull().references(() => users.id),
-  usedBy: char('used_by', { length: 36 }).references(() => users.id),
+  createdBy: varchar('created_by', { length: 21 }).notNull().references(() => users.id),
+  usedBy: varchar('used_by', { length: 21 }).references(() => users.id),
   usedAt: timestamp('used_at'),
   expiresAt: timestamp('expires_at'),
   createdAt: createdAt(),
@@ -114,10 +115,10 @@ export const inviteCodes = mysqlTable('invite_codes', {
 
 export const tokenUsage = mysqlTable('token_usage', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id),
-  workspaceId: char('workspace_id', { length: 36 }).notNull().references(() => workspaces.id),
-  sessionId: char('session_id', { length: 36 }).notNull(), // workspace.db 中的 session，不做 FK
-  providerId: char('provider_id', { length: 36 }).notNull().references(() => providers.id),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id),
+  workspaceId: varchar('workspace_id', { length: 21 }).notNull().references(() => workspaces.id),
+  sessionId: varchar('session_id', { length: 21 }).notNull(), // workspace.db 中的 session，不做 FK
+  providerId: varchar('provider_id', { length: 21 }).notNull().references(() => providers.id),
   model: varchar('model', { length: 100 }).notNull(),
   inputTokens: int('input_tokens').notNull(),
   outputTokens: int('output_tokens').notNull(),
@@ -126,7 +127,7 @@ export const tokenUsage = mysqlTable('token_usage', {
 
 export const refreshTokens = mysqlTable('refresh_tokens', {
   id: id(),
-  userId: char('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   token: varchar('token', { length: 500 }).notNull().unique(),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: createdAt(),

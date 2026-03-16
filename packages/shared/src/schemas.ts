@@ -39,7 +39,7 @@ export const createSessionSchema = z.object({
 
 // Memory
 export const createMemorySchema = z.object({
-  workspaceId: z.string().uuid().nullable().optional(),
+  workspaceId: z.string().length(21).nullable().optional(),
   name: z.string().min(1).max(100),
   type: z.enum(['user', 'feedback', 'project', 'reference']),
   content: z.string().min(1),
@@ -53,7 +53,7 @@ export const updateMemorySchema = z.object({
 
 // Skill
 export const createSkillSchema = z.object({
-  workspaceId: z.string().uuid().nullable().optional(),
+  workspaceId: z.string().length(21).nullable().optional(),
   name: z.string().min(1).max(100),
   description: z.string().min(1).max(500),
   content: z.string().min(1),
