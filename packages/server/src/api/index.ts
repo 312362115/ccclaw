@@ -12,10 +12,12 @@ import { dashboardRouter } from './dashboard.js';
 import { inviteCodesRouter } from './invite-codes.js';
 import { preferencesRouter } from './preferences.js';
 import { adminRouter } from './admin.js';
+import { oauthRouter } from './oauth.js';
 
 export const api = new Hono();
 
 api.route('/auth', authRouter);
+api.route('/oauth', oauthRouter);
 api.route('/users', usersRouter);
 api.route('/workspaces', workspacesRouter);
 api.route('/workspaces', sessionsRouter);    // /api/workspaces/:id/sessions

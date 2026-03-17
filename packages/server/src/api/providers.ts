@@ -20,10 +20,28 @@ providersRouter.get('/', async (c) => {
     type: schema.providers.type,
     authType: schema.providers.authType,
     isDefault: schema.providers.isDefault,
+    oauthState: schema.providers.oauthState,
     createdAt: schema.providers.createdAt,
   }).from(schema.providers)
     .where(eq(schema.providers.userId, userId));
-  return c.json(rows);
+
+  return c.json(rows.map(({ oauthState, ...row }: { oauthState: string | null; [key: string]: unknown }) => {
+    let oauthStatus: 'authorized' | 'expired' | 'not_configured' | null = null;
+    if (row.authType === 'oauth') {
+      if (!oauthState) {
+        oauthStatus = 'not_configured';
+      } else {
+        try {
+          const state = JSON.parse(decrypt(oauthState as string, config.ENCRYPTION_KEY));
+          const expiresAt = new Date(state.expiresAt).getTime();
+          oauthStatus = Date.now() < expiresAt ? 'authorized' : 'expired';
+        } catch {
+          oauthStatus = 'not_configured';
+        }
+      }
+    }
+    return { ...row, oauthStatus };
+  }));
 });
 
 // POST /api/providers — 创建 Provider
