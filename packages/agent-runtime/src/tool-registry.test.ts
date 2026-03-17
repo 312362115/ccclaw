@@ -155,3 +155,41 @@ describe('castParams', () => {
     expect(result.unknown).toBe('123');
   });
 });
+
+describe('restricted mode', () => {
+  it('blocks non-allowed tools in restricted mode', async () => {
+    const registry = new ToolRegistry();
+    // Register a bash tool with a simple executor
+    registry.register({ name: 'bash', description: 'shell', schema: { type: 'object', properties: {} }, execute: async () => 'ok' });
+    registry.register({ name: 'memory_write', description: 'mem', schema: { type: 'object', properties: {} }, execute: async () => 'saved' });
+
+    registry.enterRestrictedMode(['memory_write']);
+    const result = await registry.execute('bash', { command: 'ls' });
+    expect(result).toContain('not available during context consolidation');
+  });
+
+  it('allows listed tools in restricted mode', async () => {
+    const registry = new ToolRegistry();
+    registry.register({ name: 'memory_write', description: 'mem', schema: { type: 'object', properties: {} }, execute: async () => 'saved' });
+    registry.enterRestrictedMode(['memory_write']);
+    const result = await registry.execute('memory_write', {});
+    expect(result).toBe('saved');
+  });
+
+  it('exitRestrictedMode restores all tools', async () => {
+    const registry = new ToolRegistry();
+    registry.register({ name: 'bash', description: 'shell', schema: { type: 'object', properties: {} }, execute: async () => 'ok' });
+    registry.enterRestrictedMode(['memory_write']);
+    registry.exitRestrictedMode();
+    const result = await registry.execute('bash', {});
+    expect(result).toBe('ok');
+  });
+
+  it('no restriction when restrictedTools is null', async () => {
+    const registry = new ToolRegistry();
+    registry.register({ name: 'bash', description: 'shell', schema: { type: 'object', properties: {} }, execute: async () => 'ok' });
+    // No enterRestrictedMode called
+    const result = await registry.execute('bash', {});
+    expect(result).toBe('ok');
+  });
+});

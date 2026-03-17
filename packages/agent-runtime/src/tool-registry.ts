@@ -39,6 +39,7 @@ const MAX_TOOL_RESULT_CHARS = 16_000;
 
 export class ToolRegistry {
   private tools = new Map<string, Tool>();
+  private restrictedTools: Set<string> | null = null;
 
   /** 注册一个工具 */
   register(tool: Tool): void {
@@ -90,8 +91,22 @@ export class ToolRegistry {
     return this.tools.size;
   }
 
+  /** 进入受限模式，只允许指定工具执行 */
+  enterRestrictedMode(allowedTools: string[]): void {
+    this.restrictedTools = new Set(allowedTools);
+  }
+
+  /** 退出受限模式，恢复所有工具 */
+  exitRestrictedMode(): void {
+    this.restrictedTools = null;
+  }
+
   /** 执行工具，返回结果字符串 */
   async execute(name: string, params: Record<string, unknown>): Promise<string> {
+    if (this.restrictedTools && !this.restrictedTools.has(name)) {
+      return `Error: Tool "${name}" is not available during context consolidation. Only memory tools are allowed.`;
+    }
+
     const tool = this.tools.get(name);
     if (!tool) {
       return `Error: Unknown tool "${name}"\n\nAvailable tools: ${this.getToolNames().join(', ')}`;
