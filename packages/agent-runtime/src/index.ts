@@ -15,6 +15,7 @@ import { Consolidator } from './consolidator.js';
 import { LLMProviderFactory } from './llm/index.js';
 import { SkillLoader } from './skill-loader.js';
 import { MCPManager } from './mcp-manager.js';
+import { TerminalManager } from './terminal-manager.js';
 
 // 内置工具
 import { bashTool, fileTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
@@ -41,6 +42,7 @@ if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
 /** Shared modules (provider is per-request, added in handleRequest) */
 type SharedDeps = Omit<AgentDeps, 'provider'>;
 let sharedDeps: SharedDeps | undefined;
+let terminalManager: TerminalManager | undefined;
 
 function initModules(): void {
   try {
@@ -84,6 +86,17 @@ function initModules(): void {
       consolidator,
       mcpManager,
     };
+
+    // TerminalManager
+    terminalManager = new TerminalManager({
+      workspaceDir: WORKSPACE_DIR,
+      onOutput: (terminalId, data) => {
+        sendToServer({ type: 'terminal_output', terminalId, data });
+      },
+      onExit: (terminalId, code) => {
+        sendToServer({ type: 'terminal_exit', terminalId, code });
+      },
+    });
 
     console.log(`[runner:${RUNNER_ID}] 模块初始化完成: ${toolRegistry.size} 个工具, ${skillLoader.getSkills().length} 个 Skill`);
   } catch (err) {
@@ -142,9 +155,7 @@ function connect() {
 function startHeartbeat() {
   stopHeartbeat();
   heartbeatTimer = setInterval(() => {
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'ping' }));
-    }
+    sendToServer({ type: 'ping' });
   }, HEARTBEAT_INTERVAL);
 }
 
@@ -185,21 +196,46 @@ function handleServerMessage(msg: ServerMessage) {
     return;
   }
 
-  if (msg.type === 'request' && msg.requestId && msg.data) {
+  if (msg.type === 'request') {
     handleRequest(msg.requestId, msg.data).catch((err) => {
       console.error(`[runner:${RUNNER_ID}] 请求处理失败:`, err);
-      sendResponse(msg.requestId!, { type: 'error', error: new Error(String(err)) });
+      sendResponse(msg.requestId, { type: 'error', error: new Error(String(err)) });
     });
+    return;
   }
 
-  if (msg.type === 'confirm_response' && msg.confirmRequestId !== undefined) {
+  if (msg.type === 'confirm_response') {
     const resolver = pendingConfirms.get(msg.confirmRequestId);
     if (resolver) {
       pendingConfirms.delete(msg.confirmRequestId);
-      resolver(msg.approved ?? false);
+      resolver(msg.approved);
     } else {
       console.warn(`[runner:${RUNNER_ID}] 未找到 confirm resolver: ${msg.confirmRequestId}`);
     }
+    return;
+  }
+
+  if (msg.type === 'terminal_open') {
+    const ok = terminalManager?.open(msg.terminalId, msg.cols, msg.rows);
+    if (!ok) {
+      console.warn(`[runner:${RUNNER_ID}] terminal_open 失败: terminalId=${msg.terminalId}`);
+    }
+    return;
+  }
+
+  if (msg.type === 'terminal_input') {
+    terminalManager?.write(msg.terminalId, msg.data);
+    return;
+  }
+
+  if (msg.type === 'terminal_resize') {
+    terminalManager?.resize(msg.terminalId, msg.cols, msg.rows);
+    return;
+  }
+
+  if (msg.type === 'terminal_close') {
+    terminalManager?.close(msg.terminalId);
+    return;
   }
 }
 
@@ -236,10 +272,14 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
   await runAgent(request, onStream, deps);
 }
 
-function sendResponse(requestId: string, data: AgentResponse) {
+function sendToServer(msg: import('./protocol.js').RunnerMessage): void {
   if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'response', requestId, data }));
+    ws.send(JSON.stringify(msg));
   }
+}
+
+function sendResponse(requestId: string, data: AgentResponse) {
+  sendToServer({ type: 'response', requestId, data });
 }
 
 // ====== 优雅退出 ======
@@ -247,6 +287,7 @@ function sendResponse(requestId: string, data: AgentResponse) {
 function shutdown() {
   console.log(`[runner:${RUNNER_ID}] 正在关闭...`);
   stopHeartbeat();
+  terminalManager?.closeAll();
   if (sharedDeps?.db) {
     sharedDeps.db.close();
   }

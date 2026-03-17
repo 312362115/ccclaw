@@ -26,19 +26,19 @@ export type { LLMStreamEvent, AgentStreamEvent, TokenUsage } from './llm/types.j
 export type AgentResponse = AgentStreamEvent;  // backward compat alias
 
 // Runner → Server 消息
-export interface RunnerMessage {
-  type: 'ping' | 'response';
-  requestId?: string;
-  data?: AgentResponse;
-}
+export type RunnerMessage =
+  | { type: 'ping' }
+  | { type: 'response'; requestId: string; data: AgentResponse }
+  | { type: 'terminal_output'; terminalId: string; data: string }
+  | { type: 'terminal_exit'; terminalId: string; code: number };
 
 // Server → Runner 消息
-export interface ServerMessage {
-  type: 'registered' | 'pong' | 'request' | 'confirm_response';
-  runnerId?: string;
-  requestId?: string;
-  data?: AgentRequest;
-  // confirm_response fields
-  confirmRequestId?: string;
-  approved?: boolean;
-}
+export type ServerMessage =
+  | { type: 'registered'; runnerId?: string }
+  | { type: 'pong' }
+  | { type: 'request'; requestId: string; data: AgentRequest }
+  | { type: 'confirm_response'; confirmRequestId: string; approved: boolean }
+  | { type: 'terminal_open'; terminalId: string; cols: number; rows: number }
+  | { type: 'terminal_input'; terminalId: string; data: string }
+  | { type: 'terminal_resize'; terminalId: string; cols: number; rows: number }
+  | { type: 'terminal_close'; terminalId: string };

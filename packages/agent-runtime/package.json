@@ -10,6 +10,7 @@
   "dependencies": {
     "@ccclaw/shared": "workspace:*",
     "better-sqlite3": "^11.7.0",
+    "node-pty": "^1.1.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
