@@ -272,6 +272,12 @@ export class WorkspaceDB {
     ).all(pattern, pattern, limit) as Memory[];
   }
 
+  getMemoriesByType(type: Memory['type']): Memory[] {
+    return this.db.prepare(
+      'SELECT * FROM memories WHERE type = ? ORDER BY updated_at ASC',
+    ).all(type) as Memory[];
+  }
+
   deleteMemory(id: string): void {
     this.db.prepare('DELETE FROM memories WHERE id = ?').run(id);
   }

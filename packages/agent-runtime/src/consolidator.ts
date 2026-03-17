@@ -1,10 +1,10 @@
 /**
- * Consolidator — Token 驱动的上下文整合
+ * Consolidator — 滑动窗口上下文整合
  *
- * 当 session 消息 token 超过上下文窗口 50% 时触发整合：
- * 1. 从头部切割消息块
- * 2. 三级降级策略归档到记忆
- * 3. 更新 lastConsolidated 偏移
+ * 1. 滑动窗口：未压缩消息 token > contextWindow * 0.3 时，
+ *    压缩 1 个 user turn group（user + 后续 assistant/tool 消息）
+ * 2. 硬截断：总 token > contextWindow * 0.8 时，跳过 LLM，直接截断到 log memory
+ * 3. Log 记忆合并：log 记忆 > 15 条 OR > 4000 tokens 时，LLM 合并为 1-2 条
  *
  * 记忆压缩：当 decision + feedback 总 token 超过阈值时，
  * 调用 LLM 合并压缩。
@@ -32,8 +32,10 @@ export interface ConsolidatorOptions {
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const DEFAULT_MEMORY_COMPRESS_THRESHOLD = 4_000;
-const CONSOLIDATION_THRESHOLD_RATIO = 0.5;
-const TARGET_RATIO = 0.3; // 整合后目标：保留 30% 窗口的消息
+const SLIDING_TRIGGER_RATIO = 0.3;
+const HARD_TRUNCATE_RATIO = 0.8;
+const LOG_MERGE_COUNT = 15;
+const LOG_MERGE_TOKENS = 4000;
 
 // ====== Consolidator ======
 
@@ -59,22 +61,31 @@ export class Consolidator {
     const estimated = estimateMessagesTokens(
       messages.map((m) => ({ role: m.role, content: m.content })),
     );
-    const threshold = this.contextWindowTokens * CONSOLIDATION_THRESHOLD_RATIO;
 
-    if (estimated <= threshold) return false;
+    // Hard truncation: total token > 80% of context window → skip LLM, direct archive
+    const hardThreshold = this.contextWindowTokens * HARD_TRUNCATE_RATIO;
+    if (estimated > hardThreshold) {
+      return this.hardTruncate(messages, sessionId, session.last_consolidated);
+    }
 
-    const targetRemove = estimated - this.contextWindowTokens * TARGET_RATIO;
-    const boundary = this.pickBoundary(messages, targetRemove);
+    // Sliding window: unconsolidated tokens > 30% of context window → compress 1 turn group
+    const slidingThreshold = this.contextWindowTokens * SLIDING_TRIGGER_RATIO;
+    if (estimated <= slidingThreshold) return false;
 
-    if (boundary <= 0) return false;
+    // Find first user turn group (user message + following assistant/tool messages)
+    const groupEnd = this.findFirstTurnGroupEnd(messages);
+    if (groupEnd <= 0) return false;
 
-    const chunk = messages.slice(0, boundary);
+    const chunk = messages.slice(0, groupEnd);
     const success = await this.consolidateChunk(chunk, sessionId);
 
     if (success) {
       this.db.updateSession(sessionId, {
-        last_consolidated: session.last_consolidated + boundary,
+        last_consolidated: session.last_consolidated + groupEnd,
       });
+
+      // After compression, check if log memories need merging
+      await this.mergeLogMemoriesIfNeeded();
     }
 
     return success;
@@ -129,7 +140,38 @@ export class Consolidator {
   }
 
   /**
-   * 找到合适的切割边界
+   * 找到第一个 user turn group 的结束位置
+   * 一个 turn group = 1 条 user 消息 + 紧跟的 assistant/tool 消息
+   */
+  findFirstTurnGroupEnd(messages: Message[]): number {
+    if (messages.length === 0) return 0;
+
+    // 找到第一条 user 消息
+    let i = 0;
+    while (i < messages.length && messages[i].role !== 'user') {
+      i++;
+    }
+    if (i >= messages.length) return 0;
+
+    // 跳过 user 消息
+    i++;
+
+    // 跳过后续的 assistant/tool 消息
+    while (i < messages.length && messages[i].role !== 'user') {
+      i++;
+    }
+
+    // 不要整合所有消息，至少保留最后 2 条
+    const minKeep = 2;
+    if (i > messages.length - minKeep) {
+      i = Math.max(0, messages.length - minKeep);
+    }
+
+    return i;
+  }
+
+  /**
+   * 找到合适的切割边界（用于 hard truncation）
    * 从头累加 token 直到超过 tokensToRemove，
    * 然后前移到最近的 user 消息起点（避免切断对话对）
    */
@@ -159,6 +201,108 @@ export class Consolidator {
     }
 
     return boundary;
+  }
+
+  /**
+   * 硬截断：跳过 LLM，直接将头部消息归档到 log memory
+   */
+  private async hardTruncate(
+    messages: Message[],
+    sessionId: string,
+    lastConsolidated: number,
+  ): Promise<boolean> {
+    // 截断到保留 30% 窗口的消息
+    const targetRemain = this.contextWindowTokens * SLIDING_TRIGGER_RATIO;
+    const estimated = estimateMessagesTokens(
+      messages.map((m) => ({ role: m.role, content: m.content })),
+    );
+    const tokensToRemove = estimated - targetRemain;
+
+    const boundary = this.pickBoundary(messages, tokensToRemove);
+    if (boundary <= 0) return false;
+
+    const chunk = messages.slice(0, boundary);
+    const chunkText = chunk
+      .map((m) => `[${m.role}] ${m.content}`)
+      .join('\n');
+
+    // 直接归档，不调用 LLM
+    this.db.upsertMemory({
+      name: `session-${sessionId}-truncate-${Date.now()}`,
+      type: 'log',
+      content: chunkText.length > 5000 ? chunkText.slice(0, 5000) + '\n...(truncated)' : chunkText,
+    });
+
+    this.db.updateSession(sessionId, {
+      last_consolidated: lastConsolidated + boundary,
+    });
+
+    // After truncation, check if log memories need merging
+    await this.mergeLogMemoriesIfNeeded();
+
+    return true;
+  }
+
+  /**
+   * 检查并合并 log 记忆
+   * 当 log 记忆 > LOG_MERGE_COUNT 条 OR 总 token > LOG_MERGE_TOKENS 时触发
+   */
+  async mergeLogMemoriesIfNeeded(): Promise<boolean> {
+    const logMemories = this.db.getMemoriesByType('log');
+    if (logMemories.length <= 1) return false;
+
+    const totalTokens = logMemories.reduce(
+      (sum, m) => sum + estimateTokens(m.content),
+      0,
+    );
+
+    if (logMemories.length <= LOG_MERGE_COUNT && totalTokens <= LOG_MERGE_TOKENS) {
+      return false;
+    }
+
+    if (!this.callLLM) {
+      // 无 LLM 时无法合并，直接截断最旧的
+      const toRemove = logMemories.slice(0, logMemories.length - LOG_MERGE_COUNT);
+      for (const mem of toRemove) {
+        this.db.deleteMemory(mem.id);
+      }
+      return toRemove.length > 0;
+    }
+
+    // 调用 LLM 合并所有 log 记忆为 1-2 条
+    const allContent = logMemories
+      .map((m) => m.content)
+      .join('\n---\n');
+
+    try {
+      const response = await this.callLLM({
+        systemPrompt:
+          '你是一个记忆合并助手。请将以下多段对话记录合并为 1-2 段精炼的总结，保留关键信息、决策要点和重要上下文。输出合并后的总结，不要添加解释。用 --- 分隔多段总结。',
+        messages: [{ role: 'user', content: allContent }],
+      });
+
+      if (response.content) {
+        // 删除旧 log 记忆
+        for (const mem of logMemories) {
+          this.db.deleteMemory(mem.id);
+        }
+
+        // 写入合并后的 1-2 条
+        const summaries = response.content.split('---').map((s) => s.trim()).filter(Boolean);
+        for (let i = 0; i < summaries.length; i++) {
+          this.db.upsertMemory({
+            name: `merged-log-${Date.now()}-${i}`,
+            type: 'log',
+            content: summaries[i],
+          });
+        }
+        return true;
+      }
+    } catch {
+      // 合并失败不影响主流程
+    }
+
+    return false;
   }
 
   /**
