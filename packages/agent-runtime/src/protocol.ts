@@ -1,24 +1,29 @@
 // Agent 请求/响应协议 — 与 Server 端 runner-manager.ts 共享类型定义
 
+import type { LLMStreamEvent, AgentStreamEvent, TokenUsage } from './llm/types.js';
+
 export interface AgentRequest {
   method: 'run';
   params: {
     sessionId: string;
     message: string;
     apiKey: string;
+    providerType: string;    // 'claude' | 'openai' | 'gemini' | etc
+    apiBase?: string;        // custom endpoint
     context: {
-      memories: string[];
-      skills: string[];
-      history: Array<{ role: string; content: string }>;
       systemPrompt: string;
+      memories: any[];
+      skills: any[];
+      history: any[];
+      preferences: any;
+      mcpServers: any[];
     };
   };
 }
 
-export interface AgentResponse {
-  type: 'text_delta' | 'tool_use' | 'tool_result' | 'confirm_request' | 'done' | 'error';
-  [key: string]: unknown;
-}
+// Re-export stream event types for convenience
+export type { LLMStreamEvent, AgentStreamEvent, TokenUsage } from './llm/types.js';
+export type AgentResponse = AgentStreamEvent;  // backward compat alias
 
 // Runner → Server 消息
 export interface RunnerMessage {
