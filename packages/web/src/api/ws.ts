@@ -16,6 +16,8 @@ export type WsMessageType =
   | 'session_done'
   | 'subagent_started'
   | 'subagent_result'
+  | 'terminal_output'
+  | 'terminal_exit'
   | 'error';
 
 export interface WsIncoming {
@@ -40,6 +42,9 @@ export interface WsIncoming {
   // subagent_started / subagent_result
   taskId?: string;
   label?: string;
+  // terminal_output / terminal_exit
+  data?: string;
+  code?: number;
 }
 
 type MessageHandler = (msg: WsIncoming) => void;
@@ -47,6 +52,9 @@ type MessageHandler = (msg: WsIncoming) => void;
 let ws: WebSocket | null = null;
 let handlers = new Set<MessageHandler>();
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+const terminalOutputCallbacks = new Map<string, (data: string) => void>();
+const terminalExitCallbacks = new Map<string, (code: number) => void>();
 
 export function connectWs(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -66,6 +74,14 @@ export function connectWs(): Promise<void> {
         const msg: WsIncoming = JSON.parse(e.data);
         if (msg.type === 'auth_ok') {
           resolve();
+          return;
+        }
+        if (msg.type === 'terminal_output' && msg.sessionId && msg.data !== undefined) {
+          terminalOutputCallbacks.get(msg.sessionId)?.(msg.data);
+          return;
+        }
+        if (msg.type === 'terminal_exit' && msg.sessionId) {
+          terminalExitCallbacks.get(msg.sessionId)?.(msg.code ?? 0);
           return;
         }
         handlers.forEach((h) => h(msg));
@@ -112,6 +128,43 @@ export function sendConfirmResponse(workspaceId: string, sessionId: string, requ
 export function onWsMessage(handler: MessageHandler) {
   handlers.add(handler);
   return () => { handlers.delete(handler); };
+}
+
+function send(data: unknown) {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(data));
+  }
+}
+
+// ====== Terminal ======
+
+export function sendTerminalOpen(workspaceId: string, sessionId: string, cols: number, rows: number) {
+  send({ type: 'terminal_open', workspaceId, sessionId, cols, rows });
+}
+
+export function sendTerminalInput(workspaceId: string, sessionId: string, data: string) {
+  send({ type: 'terminal_input', workspaceId, sessionId, data });
+}
+
+export function sendTerminalResize(workspaceId: string, sessionId: string, cols: number, rows: number) {
+  send({ type: 'terminal_resize', workspaceId, sessionId, cols, rows });
+}
+
+export function sendTerminalClose(workspaceId: string, sessionId: string) {
+  send({ type: 'terminal_close', workspaceId, sessionId });
+}
+
+export function onTerminalOutput(sessionId: string, cb: (data: string) => void) {
+  terminalOutputCallbacks.set(sessionId, cb);
+}
+
+export function onTerminalExit(sessionId: string, cb: (code: number) => void) {
+  terminalExitCallbacks.set(sessionId, cb);
+}
+
+export function offTerminal(sessionId: string) {
+  terminalOutputCallbacks.delete(sessionId);
+  terminalExitCallbacks.delete(sessionId);
 }
 
 export function disconnectWs() {

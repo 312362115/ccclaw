@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ChatLayout } from './pages/chat/ChatLayout';
+import Terminal from './pages/chat/Terminal';
 import { ConsoleLayout } from './pages/console/ConsoleLayout';
 import { Dashboard } from './pages/console/Dashboard';
 import { Workspaces } from './pages/console/Workspaces';
@@ -40,6 +41,7 @@ export function App() {
           <Route index element={<Navigate to="/console" replace />} />
           <Route path="chat" element={<ChatLayout />} />
           <Route path="chat/:workspaceId" element={<ChatLayout />} />
+          <Route path="chat/:workspaceId/terminal" element={<Terminal />} />
           <Route path="console" element={<ConsoleLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="workspaces" element={<Workspaces />} />
