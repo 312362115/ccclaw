@@ -52,6 +52,7 @@ interface RunnerInfo {
   workspaces: Set<string>;
   containerId?: string;
   childProcess?: ChildProcess;
+  terminalCallback?: (msg: Record<string, unknown>) => void;
 }
 
 interface PendingRequest {
@@ -71,13 +72,13 @@ export class RunnerManager {
 
   // ====== Runner 注册 ======
 
-  registerRunner(ws: WebSocket, runnerId: string, startMode: StartMode = 'remote') {
+  registerRunner(ws: WebSocket, runnerId: string, startMode: StartMode = 'remote', terminalCallback?: (msg: Record<string, unknown>) => void) {
     const old = this.runners.get(runnerId);
     if (old?.ws.readyState === WebSocket.OPEN) {
       old.ws.close(1000, '被新连接替代');
     }
 
-    const info: RunnerInfo = { ws, runnerId, startMode, lastPing: Date.now(), workspaces: new Set() };
+    const info: RunnerInfo = { ws, runnerId, startMode, lastPing: Date.now(), workspaces: new Set(), terminalCallback };
     this.runners.set(runnerId, info);
 
     ws.on('message', (raw) => {
@@ -96,6 +97,8 @@ export class RunnerManager {
               this.pendingRequests.delete(msg.requestId);
             }
           }
+        } else if (msg.type === 'terminal_output' || msg.type === 'terminal_exit') {
+          info.terminalCallback?.(msg as Record<string, unknown>);
         }
       } catch (err) {
         logger.error({ runnerId, error: String(err) }, 'Runner message parse error');
@@ -244,6 +247,22 @@ export class RunnerManager {
       this.pendingRequests.set(requestId, { onMessage, resolve, reject, timer });
       runner.ws.send(JSON.stringify({ type: 'request', requestId, data: request }));
     });
+  }
+
+  // ====== 终端消息透传 ======
+
+  sendToRunner(workspaceSlug: string, msg: Record<string, unknown>) {
+    const runnerId = this.bindings.get(workspaceSlug);
+    if (!runnerId) {
+      logger.warn({ workspaceSlug }, 'sendToRunner: 工作区未绑定 Runner');
+      return;
+    }
+    const runner = this.runners.get(runnerId);
+    if (!runner || runner.ws.readyState !== WebSocket.OPEN) {
+      logger.warn({ runnerId }, 'sendToRunner: Runner 不在线');
+      return;
+    }
+    runner.ws.send(JSON.stringify(msg));
   }
 
   // ====== Confirm Response ======

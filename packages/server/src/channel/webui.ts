@@ -13,14 +13,21 @@ interface AuthenticatedSocket extends WebSocket {
 }
 
 interface WsMessage {
-  type: 'auth' | 'message' | 'cancel' | 'confirm_response';
+  type: 'auth' | 'message' | 'cancel' | 'confirm_response' | 'terminal_open' | 'terminal_input' | 'terminal_resize' | 'terminal_close';
   token?: string;
   workspaceId?: string;
   sessionId?: string;
   content?: string;
   requestId?: string;
   approved?: boolean;
+  // terminal fields
+  cols?: number;
+  rows?: number;
+  data?: string;
 }
+
+// terminalId → { workspaceSlug, client WebSocket }
+const terminalMap = new Map<string, { workspaceSlug: string; ws: WebSocket }>();
 
 export function createWebSocketHandler(server: import('node:http').Server) {
   const wss = new WebSocketServer({ noServer: true });
@@ -54,7 +61,23 @@ export function createWebSocketHandler(server: import('node:http').Server) {
         return;
       }
 
-      runnerManager.registerRunner(ws, runnerId);
+      runnerManager.registerRunner(ws, runnerId, undefined, (msg: Record<string, unknown>) => {
+        // Forward terminal messages from runner back to client
+        const type = msg.type as string;
+        if (type === 'terminal_output' || type === 'terminal_exit') {
+          const terminalId = msg.terminalId as string;
+          const mapping = terminalMap.get(terminalId);
+          if (mapping && mapping.ws.readyState === WebSocket.OPEN) {
+            const sessionId = terminalId.replace(/_term$/, '');
+            if (type === 'terminal_output') {
+              mapping.ws.send(JSON.stringify({ type: 'terminal_output', sessionId, data: msg.data }));
+            } else {
+              mapping.ws.send(JSON.stringify({ type: 'terminal_exit', sessionId, code: msg.code }));
+              terminalMap.delete(terminalId);
+            }
+          }
+        }
+      });
     });
   }
 
@@ -144,6 +167,46 @@ export function createWebSocketHandler(server: import('node:http').Server) {
             workspaceId: msg.workspaceId,
             sessionId: msg.sessionId,
           });
+        }
+
+        // 终端消息透传：client → runner
+        if (msg.type === 'terminal_open' && msg.workspaceId && msg.sessionId) {
+          const terminalId = msg.sessionId + '_term';
+          terminalMap.set(terminalId, { workspaceSlug: msg.workspaceId, ws });
+          runnerManager.sendToRunner(msg.workspaceId, {
+            type: 'terminal_open',
+            terminalId,
+            cols: msg.cols ?? 80,
+            rows: msg.rows ?? 24,
+          });
+        }
+
+        if (msg.type === 'terminal_input' && msg.workspaceId && msg.sessionId) {
+          const terminalId = msg.sessionId + '_term';
+          runnerManager.sendToRunner(msg.workspaceId, {
+            type: 'terminal_input',
+            terminalId,
+            data: msg.data,
+          });
+        }
+
+        if (msg.type === 'terminal_resize' && msg.workspaceId && msg.sessionId) {
+          const terminalId = msg.sessionId + '_term';
+          runnerManager.sendToRunner(msg.workspaceId, {
+            type: 'terminal_resize',
+            terminalId,
+            cols: msg.cols,
+            rows: msg.rows,
+          });
+        }
+
+        if (msg.type === 'terminal_close' && msg.workspaceId && msg.sessionId) {
+          const terminalId = msg.sessionId + '_term';
+          runnerManager.sendToRunner(msg.workspaceId, {
+            type: 'terminal_close',
+            terminalId,
+          });
+          terminalMap.delete(terminalId);
         }
       } catch (err) {
         logger.error(err, 'WebSocket 消息处理失败');
