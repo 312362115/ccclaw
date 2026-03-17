@@ -13,6 +13,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { WorkspaceDB, Memory } from './workspace-db.js';
 import type { ToolRegistry, ToolDefinition } from './tool-registry.js';
+import { stripImageContent } from './llm/base.js';
+import type { ProviderCapabilities } from './llm/types.js';
 
 // ====== Types ======
 
@@ -64,6 +66,7 @@ export class ContextAssembler {
   assemble(params: {
     sessionId: string;
     serverContext: ServerContext;
+    capabilities?: ProviderCapabilities;
   }): AssembledContext {
     const parts: string[] = [];
     const { sessionId, serverContext } = params;
@@ -93,7 +96,15 @@ export class ContextAssembler {
 
     // Step 7: Session 历史
     const session = this.db.getSession(sessionId);
-    const messages = this.db.getMessages(sessionId, session?.last_consolidated ?? 0);
+    let messages = this.db.getMessages(sessionId, session?.last_consolidated ?? 0);
+
+    // Vision-aware: strip image content when provider doesn't support vision
+    if (params.capabilities?.vision === false) {
+      const stripped = stripImageContent(
+        messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'tool', content: m.content })),
+      );
+      messages = messages.map((m, i) => ({ ...m, content: stripped[i].content }));
+    }
 
     return {
       systemPrompt: parts.filter(Boolean).join('\n\n'),

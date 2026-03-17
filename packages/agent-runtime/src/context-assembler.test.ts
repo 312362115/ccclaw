@@ -211,6 +211,83 @@ describe('ContextAssembler', () => {
     expect(ctx.systemPrompt).not.toContain('原始长内容');
   });
 
+  it('vision=false 时剥离图片内容', () => {
+    const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
+    db.appendMessage({
+      session_id: session.id,
+      role: 'user',
+      content: '看看这张图 data:image/png;base64,iVBORw0KGgoAAAANSUhEUg== 怎么样',
+    });
+    db.appendMessage({
+      session_id: session.id,
+      role: 'assistant',
+      content: '这是一张图片',
+    });
+
+    const ctx = assembler.assemble({
+      sessionId: session.id,
+      serverContext: defaultContext,
+      capabilities: {
+        streaming: true,
+        toolUse: true,
+        extendedThinking: false,
+        promptCaching: false,
+        vision: false,
+        contextWindow: 200000,
+        maxOutputTokens: 4096,
+      },
+    });
+
+    // Image should be stripped
+    expect(ctx.messages[0].content).toContain('[image removed]');
+    expect(ctx.messages[0].content).not.toContain('base64,iVBORw0');
+    // Non-image message unchanged
+    expect(ctx.messages[1].content).toBe('这是一张图片');
+  });
+
+  it('capabilities 未提供时不剥离图片（向后兼容）', () => {
+    const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
+    db.appendMessage({
+      session_id: session.id,
+      role: 'user',
+      content: '看看 data:image/png;base64,abc123== 这张图',
+    });
+
+    const ctx = assembler.assemble({
+      sessionId: session.id,
+      serverContext: defaultContext,
+    });
+
+    // Image should NOT be stripped when capabilities not provided
+    expect(ctx.messages[0].content).toContain('base64,abc123');
+  });
+
+  it('vision=true 时不剥离图片', () => {
+    const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
+    db.appendMessage({
+      session_id: session.id,
+      role: 'user',
+      content: '看看 data:image/png;base64,abc123== 这张图',
+    });
+
+    const ctx = assembler.assemble({
+      sessionId: session.id,
+      serverContext: defaultContext,
+      capabilities: {
+        streaming: true,
+        toolUse: true,
+        extendedThinking: false,
+        promptCaching: false,
+        vision: true,
+        contextWindow: 200000,
+        maxOutputTokens: 4096,
+      },
+    });
+
+    // Image should NOT be stripped when vision is true
+    expect(ctx.messages[0].content).toContain('base64,abc123');
+  });
+
   it('lastConsolidated 偏移读取', () => {
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
     db.appendMessage({ session_id: session.id, role: 'user', content: 'msg1' });
