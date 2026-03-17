@@ -33,6 +33,8 @@ export interface SkillMeta {
     deps?: string;
   };
   setup?: string;
+  version?: string;         // version declared in frontmatter
+  sourceUrl?: string;       // marketplace/github URL declared in frontmatter
 }
 
 export type SkillType = 'knowledge' | 'executable_declared' | 'executable_implicit';
@@ -44,6 +46,9 @@ export interface LoadedSkill {
   dir: string;
   available: boolean;
   missingReason?: string;
+  version?: string;         // current installed version
+  sourceUrl?: string;       // marketplace/github URL
+  latestVersion?: string;   // known latest version (from marketplace check)
 }
 
 // ====== Constants ======
@@ -118,6 +123,8 @@ export class SkillLoader implements ISkillLoader {
             dir: skillDir,
             available: ok,
             missingReason: reason,
+            version: meta.version,
+            sourceUrl: meta.sourceUrl,
           });
         } catch {
           // 解析失败跳过
