@@ -8,7 +8,7 @@
  */
 
 import type { WorkspaceDB } from './workspace-db.js';
-import type { LLMClient, LLMMessage, LLMToolDefinition } from './llm-client.js';
+import type { LLMProvider, LLMMessage, LLMToolDefinition } from './llm/types.js';
 import type { ToolRegistry, Tool } from './tool-registry.js';
 
 // ====== Types ======
@@ -37,7 +37,7 @@ export class SubagentManager {
 
   constructor(
     private db: WorkspaceDB,
-    private llmClient: LLMClient,
+    private provider: LLMProvider,
     private parentRegistry: ToolRegistry,
     private config: SubagentConfig = {},
   ) {}
@@ -85,11 +85,12 @@ export class SubagentManager {
     }
 
     // 工具定义
-    const llmTools: LLMToolDefinition[] = childRegistry.getDefinitions().map((t) => ({
-      name: t.name,
-      description: t.description,
-      input_schema: t.schema ? (t.schema as unknown as Record<string, unknown>) : undefined,
-    }));
+    const llmTools: LLMToolDefinition[] = childRegistry.getDefinitions()
+      .map((t) => ({
+        name: t.name,
+        description: t.description,
+        schema: (t.schema as unknown as Record<string, unknown>) ?? { type: 'object', properties: {} },
+      }));
 
     const systemPrompt = `你是一个子 Agent（${label}）。你的任务是完成以下工作后返回结果。不要发起新的子 Agent。`;
     const messages: LLMMessage[] = [
@@ -104,10 +105,12 @@ export class SubagentManager {
     while (iteration < iterLimit) {
       iteration++;
 
-      const response = await this.llmClient.call({
+      const response = await this.provider.chat({
+        model: 'claude-sonnet-4-20250514',
         systemPrompt,
         messages,
         tools: llmTools.length > 0 ? llmTools : undefined,
+        maxTokens: 8192,
       });
 
       totalInput += response.usage.inputTokens;
@@ -123,16 +126,16 @@ export class SubagentManager {
           messages.push({
             role: 'assistant',
             content: '',
-            tool_calls: response.toolCalls,
+            toolCalls: response.toolCalls,
           });
         }
 
         for (const call of response.toolCalls) {
-          const result = await childRegistry.execute(call.name, call.params);
+          const result = await childRegistry.execute(call.name, call.input as Record<string, unknown>);
           messages.push({
             role: 'tool',
             content: result,
-            tool_use_id: call.id,
+            toolResults: [{ toolCallId: call.id, output: result }],
           });
         }
       } else {

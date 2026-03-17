@@ -4,13 +4,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { WorkspaceDB } from './workspace-db.js';
 import { Consolidator } from './consolidator.js';
-import type { LLMResponse } from './llm-client.js';
+import type { ChatResponse } from './llm/types.js';
 
 let db: WorkspaceDB;
 let tmpDir: string;
 
 function mockLLM(content: string) {
-  return async (): Promise<LLMResponse> => ({
+  return async (): Promise<ChatResponse> => ({
     content,
     toolCalls: [],
     usage: { inputTokens: 0, outputTokens: 0 },

@@ -12,7 +12,7 @@ import { WorkspaceDB } from './workspace-db.js';
 import { ToolRegistry } from './tool-registry.js';
 import { ContextAssembler } from './context-assembler.js';
 import { Consolidator } from './consolidator.js';
-import { LLMClient } from './llm-client.js';
+import { LLMProviderFactory } from './llm/index.js';
 import { SkillLoader } from './skill-loader.js';
 import { MCPManager } from './mcp-manager.js';
 
@@ -29,7 +29,6 @@ const AUTH_TOKEN = process.env.AUTH_TOKEN;
 const WORKSPACE_DIR = process.env.WORKSPACE_DIR || '/workspace';
 const INTERNAL_DIR = process.env.INTERNAL_DIR || join(WORKSPACE_DIR, '..', 'internal');
 const WORKSPACE_DB = process.env.WORKSPACE_DB || join(INTERNAL_DIR, 'workspace.db');
-const API_KEY = process.env.API_KEY || '';
 const ALLOWED_PATHS = (process.env.ALLOWED_PATHS || WORKSPACE_DIR).split(':').map(p => resolve(p));
 
 if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
@@ -39,7 +38,9 @@ if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
 
 // ====== 模块初始化 ======
 
-let agentDeps: AgentDeps | undefined;
+/** Shared modules (provider is per-request, added in handleRequest) */
+type SharedDeps = Omit<AgentDeps, 'provider'>;
+let sharedDeps: SharedDeps | undefined;
 
 function initModules(): void {
   try {
@@ -70,34 +71,17 @@ function initModules(): void {
     // ContextAssembler
     const assembler = new ContextAssembler(db, skillLoader, toolRegistry, WORKSPACE_DIR);
 
-    // LLMClient（需要 API Key）
-    const llmClient = API_KEY
-      ? new LLMClient({ apiKey: API_KEY })
-      : null;
-
-    // Consolidator
-    const consolidator = new Consolidator(
-      db,
-      llmClient
-        ? (params) => llmClient.call({
-            ...params,
-            messages: params.messages.map(m => ({
-              ...m,
-              role: m.role as 'user' | 'assistant' | 'tool',
-            })),
-          })
-        : null,
-    );
+    // Consolidator（LLM callback 由 per-request provider 提供，初始为 null）
+    const consolidator = new Consolidator(db, null);
 
     // MCP Manager（从环境变量或配置中获取 MCP servers，当前为空）
-    const mcpManager = new MCPManager([], toolRegistry);
+    const mcpManager = new MCPManager({}, toolRegistry);
 
-    agentDeps = {
+    sharedDeps = {
       db,
       assembler,
       toolRegistry,
       consolidator,
-      llmClient,
       mcpManager,
     };
 
@@ -193,7 +177,7 @@ function handleServerMessage(msg: ServerMessage) {
   if (msg.type === 'request' && msg.requestId && msg.data) {
     handleRequest(msg.requestId, msg.data).catch((err) => {
       console.error(`[runner:${RUNNER_ID}] 请求处理失败:`, err);
-      sendResponse(msg.requestId!, { type: 'error', message: String(err) });
+      sendResponse(msg.requestId!, { type: 'error', error: new Error(String(err)) });
     });
   }
 }
@@ -201,7 +185,7 @@ function handleServerMessage(msg: ServerMessage) {
 async function handleRequest(requestId: string, request: import('./protocol.js').AgentRequest) {
   // 路径安全检查：workspaceDir 必须在白名单内
   if (!isPathAllowed(WORKSPACE_DIR)) {
-    sendResponse(requestId, { type: 'error', message: '工作区路径不在白名单中' });
+    sendResponse(requestId, { type: 'error', error: new Error('工作区路径不在白名单中') });
     return;
   }
 
@@ -209,7 +193,26 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
     sendResponse(requestId, msg);
   };
 
-  await runAgent(request, onStream, agentDeps);
+  // 根据请求上下文创建 LLM Provider（不同工作区可能使用不同 provider）
+  let provider = null;
+  const { providerType, apiBase, apiKey } = request.params;
+  if (apiKey) {
+    try {
+      provider = LLMProviderFactory.create({
+        type: providerType || 'claude',
+        apiKey,
+        apiBase,
+      });
+    } catch (err) {
+      console.warn(`[runner:${RUNNER_ID}] Provider 创建失败:`, err);
+    }
+  }
+
+  const deps: AgentDeps | undefined = sharedDeps
+    ? { ...sharedDeps, provider }
+    : undefined;
+
+  await runAgent(request, onStream, deps);
 }
 
 function sendResponse(requestId: string, data: AgentResponse) {
@@ -223,8 +226,8 @@ function sendResponse(requestId: string, data: AgentResponse) {
 function shutdown() {
   console.log(`[runner:${RUNNER_ID}] 正在关闭...`);
   stopHeartbeat();
-  if (agentDeps?.db) {
-    agentDeps.db.close();
+  if (sharedDeps?.db) {
+    sharedDeps.db.close();
   }
   if (ws?.readyState === WebSocket.OPEN) {
     ws.close(1000, '进程退出');

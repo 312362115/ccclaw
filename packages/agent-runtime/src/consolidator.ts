@@ -12,7 +12,7 @@
 
 import type { WorkspaceDB, Message } from './workspace-db.js';
 import { estimateTokens, estimateMessagesTokens } from './utils/token-estimator.js';
-import type { LLMResponse } from './llm-client.js';
+import type { ChatResponse } from './llm/types.js';
 
 // ====== Types ======
 
@@ -20,7 +20,7 @@ export interface ConsolidatorLLMCall {
   (params: {
     systemPrompt: string;
     messages: Array<{ role: string; content: string }>;
-  }): Promise<LLMResponse>;
+  }): Promise<ChatResponse>;
 }
 
 export interface ConsolidatorOptions {

@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@ccclaw/shared": "workspace:*",
-    "@anthropic-ai/claude-code": "^1.0.0",
     "better-sqlite3": "^11.7.0",
     "ws": "^8.18.0"
   },
