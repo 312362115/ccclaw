@@ -161,8 +161,26 @@ export class AgentManager {
           });
         });
       }
-      // cancel / confirm_response 暂不处理，后续 Task 扩展
+
+      if (msg.type === 'confirm_response') {
+        this.handleConfirmResponse(msg).catch((err) => {
+          logger.error(err, `confirm_response 转发失败: session=${msg.sessionId}`);
+        });
+      }
+
+      // cancel 暂不处理，后续 Task 扩展
     });
+  }
+
+  private async handleConfirmResponse(msg: InboundMessage & { type: 'confirm_response' }) {
+    const { workspaceId, requestId, approved } = msg;
+    const [workspace] = await db.select().from(schema.workspaces)
+      .where(eq(schema.workspaces.id, workspaceId)).limit(1);
+    if (!workspace) {
+      logger.warn({ workspaceId }, 'confirm_response: 工作区不存在');
+      return;
+    }
+    runnerManager.sendConfirmResponse(workspace.slug, requestId, approved);
   }
 
   private async handleInboundMessage(msg: InboundMessage & { type: 'user_message' }) {

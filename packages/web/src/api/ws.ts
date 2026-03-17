@@ -97,6 +97,18 @@ export function sendMessage(workspaceId: string, sessionId: string, content: str
   }
 }
 
+export function sendConfirmResponse(workspaceId: string, sessionId: string, requestId: string, approved: boolean) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'confirm_response',
+      workspaceId,
+      sessionId,
+      requestId,
+      approved,
+    }));
+  }
+}
+
 export function onWsMessage(handler: MessageHandler) {
   handlers.add(handler);
   return () => { handlers.delete(handler); };

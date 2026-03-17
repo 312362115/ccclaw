@@ -34,8 +34,11 @@ export interface RunnerMessage {
 
 // Server → Runner 消息
 export interface ServerMessage {
-  type: 'registered' | 'pong' | 'request';
+  type: 'registered' | 'pong' | 'request' | 'confirm_response';
   runnerId?: string;
   requestId?: string;
   data?: AgentRequest;
+  // confirm_response fields
+  confirmRequestId?: string;
+  approved?: boolean;
 }

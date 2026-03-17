@@ -38,7 +38,7 @@ export function ChatView({ workspaceId, sessionId }: Props) {
       {/* 消息流 */}
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} />
+          <MessageBubble key={msg.id} msg={msg} workspaceId={workspaceId} sessionId={sessionId} />
         ))}
 
         {/* 流式输出中 */}

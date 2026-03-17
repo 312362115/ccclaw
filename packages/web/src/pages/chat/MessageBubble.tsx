@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ChatMessage } from '../../stores/chat';
+import { useChatStore } from '../../stores/chat';
 
 function formatToolInput(input: string): string {
   try {
@@ -9,8 +10,15 @@ function formatToolInput(input: string): string {
   }
 }
 
-export function MessageBubble({ msg }: { msg: ChatMessage }) {
+interface MessageBubbleProps {
+  msg: ChatMessage;
+  workspaceId: string;
+  sessionId: string;
+}
+
+export function MessageBubble({ msg, workspaceId, sessionId }: MessageBubbleProps) {
   const [expanded, setExpanded] = useState(false);
+  const resolveConfirm = useChatStore((s) => s.resolveConfirm);
 
   // ── System message (consolidation, sub-agent events, etc.) ────────────────
   if (msg.role === 'system') {
@@ -132,13 +140,13 @@ export function MessageBubble({ msg }: { msg: ChatMessage }) {
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
-                onClick={() => {/* send confirm_response approved=true */}}
+                onClick={() => resolveConfirm(workspaceId, sessionId, msg.confirmRequestId!, true)}
                 style={{ padding: '4px 12px', background: '#137333', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
               >
                 允许
               </button>
               <button
-                onClick={() => {/* send confirm_response approved=false */}}
+                onClick={() => resolveConfirm(workspaceId, sessionId, msg.confirmRequestId!, false)}
                 style={{ padding: '4px 12px', background: '#c5221f', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
               >
                 拒绝

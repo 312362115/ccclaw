@@ -246,6 +246,22 @@ export class RunnerManager {
     });
   }
 
+  // ====== Confirm Response ======
+
+  sendConfirmResponse(workspaceSlug: string, requestId: string, approved: boolean) {
+    const runnerId = this.bindings.get(workspaceSlug);
+    if (!runnerId) {
+      logger.warn({ workspaceSlug }, 'sendConfirmResponse: 工作区未绑定 Runner');
+      return;
+    }
+    const runner = this.runners.get(runnerId);
+    if (!runner || runner.ws.readyState !== WebSocket.OPEN) {
+      logger.warn({ runnerId }, 'sendConfirmResponse: Runner 不在线');
+      return;
+    }
+    runner.ws.send(JSON.stringify({ type: 'confirm_response', confirmRequestId: requestId, approved }));
+  }
+
   // ====== 状态查询 ======
 
   getStatus(workspaceSlug: string): 'running' | 'stopped' | 'error' {

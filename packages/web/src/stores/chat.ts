@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { sendMessage, onWsMessage, type WsIncoming } from '../api/ws';
+import { sendMessage, sendConfirmResponse, onWsMessage, type WsIncoming } from '../api/ws';
 
 export interface ChatMessage {
   id: string;
@@ -51,6 +51,9 @@ interface ChatState {
 
   // Confirm request
   onConfirmRequest: (sessionId: string, requestId: string, tool: string, input: unknown, reason: string) => void;
+
+  // Confirm response (from user clicking Allow/Deny)
+  resolveConfirm: (workspaceId: string, sessionId: string, requestId: string, approved: boolean) => void;
 }
 
 let msgCounter = 0;
@@ -214,6 +217,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newMap = new Map(state.messages);
     newMap.set(sessionId, msgs);
     set({ messages: newMap });
+  },
+
+  // ── Confirm response ──────────────────────────────────────────────────────
+
+  resolveConfirm: (workspaceId, sessionId, requestId, approved) => {
+    const state = get();
+    const msgs = (state.messages.get(sessionId) || []).map((m) => {
+      if (m.confirmRequestId === requestId && m.confirmPending) {
+        return {
+          ...m,
+          confirmPending: false,
+          content: approved ? '✓ 已允许' : '✗ 已拒绝',
+        };
+      }
+      return m;
+    });
+    const newMap = new Map(state.messages);
+    newMap.set(sessionId, msgs);
+    set({ messages: newMap });
+    sendConfirmResponse(workspaceId, sessionId, requestId, approved);
   },
 
   // ── WebSocket listener ────────────────────────────────────────────────────

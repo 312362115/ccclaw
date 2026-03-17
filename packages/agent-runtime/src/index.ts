@@ -162,6 +162,17 @@ function scheduleReconnect() {
   setTimeout(connect, delay);
 }
 
+// ====== Pending Confirm Resolvers ======
+
+// Map from confirmId → resolver function (called when server forwards confirm_response)
+const pendingConfirms = new Map<string, (approved: boolean) => void>();
+
+export function waitForConfirm(confirmId: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    pendingConfirms.set(confirmId, resolve);
+  });
+}
+
 // ====== 消息处理 ======
 
 function handleServerMessage(msg: ServerMessage) {
@@ -179,6 +190,16 @@ function handleServerMessage(msg: ServerMessage) {
       console.error(`[runner:${RUNNER_ID}] 请求处理失败:`, err);
       sendResponse(msg.requestId!, { type: 'error', error: new Error(String(err)) });
     });
+  }
+
+  if (msg.type === 'confirm_response' && msg.confirmRequestId !== undefined) {
+    const resolver = pendingConfirms.get(msg.confirmRequestId);
+    if (resolver) {
+      pendingConfirms.delete(msg.confirmRequestId);
+      resolver(msg.approved ?? false);
+    } else {
+      console.warn(`[runner:${RUNNER_ID}] 未找到 confirm resolver: ${msg.confirmRequestId}`);
+    }
   }
 }
 
