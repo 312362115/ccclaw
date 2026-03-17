@@ -60,7 +60,7 @@ export async function runAgent(
   }
 
   const { db, assembler, toolRegistry, consolidator, provider, mcpManager, maxIterations } = deps;
-  const { sessionId, message, context } = request.params;
+  const { sessionId, message } = request.params;
   const iterLimit = maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
   try {
@@ -85,9 +85,9 @@ export async function runAgent(
     // 1. 追加用户消息
     db.appendMessage({ session_id: sessionId, role: 'user', content: message });
 
-    // 2. 组装上下文
+    // 2. 组装上下文（systemPrompt 等已通过 config 注入到 assembler）
     const serverContext: ServerContext = {
-      workspaceId: context.systemPrompt, // 临时：从旧协议适配
+      workspaceId: '',
       workspaceName: '',
       userPreferences: {},
     };
@@ -115,8 +115,7 @@ export async function runAgent(
       // 构建 ChatParams
       const chatParams: ChatParams = {
         model:
-          request.params.model ||
-          context?.preferences?.agentModel ||
+          (provider as any).defaultModel ||
           'claude-sonnet-4-20250514',
         messages: history,
         systemPrompt: ctx.systemPrompt,
@@ -143,7 +142,7 @@ export async function runAgent(
         }
       }
 
-      if (caps.extendedThinking && context?.preferences?.reasoningEffort) {
+      if (caps.extendedThinking) {
         chatParams.thinkingConfig = { budgetTokens: 8192 };
       }
 

@@ -253,6 +253,7 @@ function convertTools(tools: LLMToolDefinition[]): AnthropicTool[] {
 export class AnthropicAdapter implements LLMProvider {
   private readonly apiKey: string;
   private readonly apiBase: string;
+  readonly defaultModel?: string;
 
   constructor(config: ProviderConfig) {
     if (!config.apiKey) {
@@ -260,6 +261,7 @@ export class AnthropicAdapter implements LLMProvider {
     }
     this.apiKey = config.apiKey;
     this.apiBase = config.apiBase ?? 'https://api.anthropic.com';
+    this.defaultModel = config.defaultModel;
   }
 
   capabilities(): ProviderCapabilities {

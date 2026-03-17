@@ -161,6 +161,7 @@ function toOpenAITools(tools: LLMToolDefinition[]): OpenAITool[] {
 export class OpenAIAdapter implements LLMProvider {
   private readonly apiKey: string;
   private readonly apiBase: string;
+  readonly defaultModel?: string;
 
   constructor(config: ProviderConfig) {
     if (!config.apiKey) {
@@ -168,6 +169,7 @@ export class OpenAIAdapter implements LLMProvider {
     }
     this.apiKey = config.apiKey;
     this.apiBase = config.apiBase ?? 'https://api.openai.com';
+    this.defaultModel = config.defaultModel;
   }
 
   capabilities(): ProviderCapabilities {

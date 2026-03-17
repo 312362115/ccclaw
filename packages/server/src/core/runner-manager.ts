@@ -11,22 +11,22 @@ import { logger } from '../logger.js';
 import { getWorkspacePaths, buildSafeEnv } from './workspace-storage.js';
 import { WORKSPACE_LABEL, SANDBOX_MEMORY_LIMIT, SANDBOX_CPU_QUOTA } from '@ccclaw/shared';
 
-// Agent 请求/响应协议（与 agent-runtime 共享）
+// 启动注入的配置
+export interface RuntimeConfig {
+  apiKey: string;
+  providerType: string;
+  apiBase?: string;
+  model?: string;
+  systemPrompt?: string;
+  skills?: string[];
+}
+
+// 聊天请求 — 只传消息
 export interface AgentRequest {
   method: 'run';
   params: {
     sessionId: string;
     message: string;
-    apiKey: string;
-    providerType?: string;
-    apiBase?: string;
-    model?: string;
-    context: {
-      memories: string[];
-      skills: string[];
-      history: Array<{ role: string; content: string }>;
-      systemPrompt: string;
-    };
   };
 }
 
@@ -224,6 +224,17 @@ export class RunnerManager {
         reject(new Error(`Runner ${runnerId} 启动超时`));
       }, timeoutMs);
     });
+  }
+
+  // ====== 配置注入 ======
+
+  sendConfig(workspaceSlug: string, config: RuntimeConfig) {
+    const runnerId = this.bindings.get(workspaceSlug);
+    if (!runnerId) return;
+    const runner = this.runners.get(runnerId);
+    if (!runner || runner.ws.readyState !== WebSocket.OPEN) return;
+    runner.ws.send(JSON.stringify({ type: 'config', data: config }));
+    logger.info({ runnerId, providerType: config.providerType, model: config.model }, 'Config pushed to runner');
   }
 
   // ====== 任务下发 ======

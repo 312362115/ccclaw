@@ -184,6 +184,29 @@ export function waitForConfirm(confirmId: string): Promise<boolean> {
   });
 }
 
+// ====== 缓存的 Provider（启动时注入，变动时更新）======
+
+let cachedProvider: import('./llm/types.js').LLMProvider | null = null;
+let cachedSystemPrompt: string | undefined;
+let cachedSkills: string[] = [];
+
+function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
+  try {
+    cachedProvider = LLMProviderFactory.create({
+      type: cfg.providerType || 'claude',
+      apiKey: cfg.apiKey,
+      apiBase: cfg.apiBase,
+      defaultModel: cfg.model,
+    });
+    console.log(`[runner:${RUNNER_ID}] Provider 已缓存: type=${cfg.providerType}, model=${cfg.model || 'default'}`);
+  } catch (err) {
+    console.error(`[runner:${RUNNER_ID}] Provider 创建失败:`, err);
+    cachedProvider = null;
+  }
+  cachedSystemPrompt = cfg.systemPrompt;
+  cachedSkills = cfg.skills ?? [];
+}
+
 // ====== 消息处理 ======
 
 function handleServerMessage(msg: ServerMessage) {
@@ -193,6 +216,12 @@ function handleServerMessage(msg: ServerMessage) {
   }
 
   if (msg.type === 'pong') {
+    return;
+  }
+
+  // 启动注入 / 变动下发
+  if (msg.type === 'config') {
+    applyConfig(msg.data);
     return;
   }
 
@@ -216,23 +245,17 @@ function handleServerMessage(msg: ServerMessage) {
   }
 
   if (msg.type === 'terminal_open') {
-    const ok = terminalManager?.open(msg.terminalId, msg.cols, msg.rows);
-    if (!ok) {
-      console.warn(`[runner:${RUNNER_ID}] terminal_open 失败: terminalId=${msg.terminalId}`);
-    }
+    terminalManager?.open(msg.terminalId, msg.cols, msg.rows);
     return;
   }
-
   if (msg.type === 'terminal_input') {
     terminalManager?.write(msg.terminalId, msg.data);
     return;
   }
-
   if (msg.type === 'terminal_resize') {
     terminalManager?.resize(msg.terminalId, msg.cols, msg.rows);
     return;
   }
-
   if (msg.type === 'terminal_close') {
     terminalManager?.close(msg.terminalId);
     return;
@@ -240,37 +263,23 @@ function handleServerMessage(msg: ServerMessage) {
 }
 
 async function handleRequest(requestId: string, request: import('./protocol.js').AgentRequest) {
-  // 路径安全检查：workspaceDir 必须在白名单内
   if (!isPathAllowed(WORKSPACE_DIR)) {
     sendResponse(requestId, { type: 'error', message: '工作区路径不在白名单中' });
     return;
   }
 
+  if (!cachedProvider) {
+    sendResponse(requestId, { type: 'error', message: 'Provider 未配置，请先在工作区设置中绑定 API Key' });
+    return;
+  }
+
   const onStream = (msg: AgentResponse) => {
-    console.log(`[runner:${RUNNER_ID}] stream event: ${msg.type}`);
     sendResponse(requestId, msg);
   };
 
-  // 根据请求上下文创建 LLM Provider（不同工作区可能使用不同 provider）
-  let provider = null;
-  const { providerType, apiBase, apiKey, model } = request.params;
-  if (apiKey) {
-    try {
-      provider = LLMProviderFactory.create({
-        type: providerType || 'claude',
-        apiKey,
-        apiBase,
-        defaultModel: model,
-      });
-    } catch (err) {
-      console.warn(`[runner:${RUNNER_ID}] Provider 创建失败:`, err);
-    }
-  }
-
-  console.log(`[runner:${RUNNER_ID}] handleRequest: provider=${providerType}, apiBase=${apiBase}, model=${model}, hasProvider=${!!provider}`);
-
+  // 直接使用缓存的 provider，不再每次创建
   const deps: AgentDeps | undefined = sharedDeps
-    ? { ...sharedDeps, provider }
+    ? { ...sharedDeps, provider: cachedProvider }
     : undefined;
 
   await runAgent(request, onStream, deps);

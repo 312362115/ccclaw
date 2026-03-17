@@ -4,7 +4,7 @@ import { decrypt } from '@ccclaw/shared';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { runnerManager } from './runner-manager.js';
-import type { AgentRequest, AgentResponse } from './runner-manager.js';
+import type { AgentRequest, AgentResponse, RuntimeConfig } from './runner-manager.js';
 import { messageBus } from '../bus/instance.js';
 import type { InboundMessage, OutboundMessage } from '../bus/index.js';
 import { OAuthTokenManager } from './oauth-token-manager.js';
@@ -122,6 +122,20 @@ export class AgentManager {
    * workspaceId: 主 DB 中的 workspace UUID
    * sessionId: workspace.db 中的 session UUID（由 Runner 管理）
    */
+  /** 构建 RuntimeConfig 供 runner 缓存 */
+  async buildRuntimeConfig(workspaceId: string, userId: string): Promise<RuntimeConfig> {
+    const { apiKey, apiBase, providerType, model } = await this.resolveProvider(workspaceId, userId);
+    const context = await this.assembleContext(workspaceId, userId);
+    return {
+      apiKey,
+      providerType,
+      apiBase,
+      model,
+      systemPrompt: context.systemPrompt,
+      skills: context.skills,
+    };
+  }
+
   async chat(
     workspaceId: string,
     userId: string,
@@ -129,17 +143,17 @@ export class AgentManager {
     message: string,
     callbacks: StreamCallback,
   ) {
-    // 1. 组装上下文（主 DB 部分）
-    const context = await this.assembleContext(workspaceId, userId);
-
-    // 2. 解析 Provider（含 OAuth token 刷新）
-    const { apiKey, apiBase, providerType, model } = await this.resolveProvider(workspaceId, userId);
-
-    // 3. 确保 Runner 就绪，然后下发任务
+    // 1. 确保 Runner 就绪
     const { slug } = await runnerManager.ensureRunner(workspaceId);
+
+    // 2. 推送配置（Runner 侧会缓存，已有则跳过重复创建）
+    const runtimeConfig = await this.buildRuntimeConfig(workspaceId, userId);
+    runnerManager.sendConfig(slug, runtimeConfig);
+
+    // 3. 发送精简请求 — 只有 sessionId + message
     const request: AgentRequest = {
       method: 'run',
-      params: { sessionId, message, apiKey, providerType, apiBase, model, context },
+      params: { sessionId, message },
     };
 
     await runnerManager.send(slug, request, (msg) => {

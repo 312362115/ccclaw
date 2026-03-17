@@ -2,23 +2,22 @@
 
 import type { LLMStreamEvent, AgentStreamEvent, TokenUsage } from './llm/types.js';
 
+// 启动时注入的配置（不随每次请求发送）
+export interface RuntimeConfig {
+  apiKey: string;
+  providerType: string;       // 'claude' | 'openai' | 'gemini' | etc
+  apiBase?: string;            // custom endpoint
+  model?: string;              // default model
+  systemPrompt?: string;
+  skills?: string[];
+}
+
+// 聊天请求 — 只传消息本身
 export interface AgentRequest {
   method: 'run';
   params: {
     sessionId: string;
     message: string;
-    apiKey: string;
-    providerType: string;    // 'claude' | 'openai' | 'gemini' | etc
-    apiBase?: string;        // custom endpoint
-    model?: string;          // override default model
-    context: {
-      systemPrompt: string;
-      memories: any[];
-      skills: any[];
-      history: any[];
-      preferences: any;
-      mcpServers: any[];
-    };
   };
 }
 
@@ -37,6 +36,7 @@ export type RunnerMessage =
 export type ServerMessage =
   | { type: 'registered'; runnerId?: string }
   | { type: 'pong' }
+  | { type: 'config'; data: RuntimeConfig }
   | { type: 'request'; requestId: string; data: AgentRequest }
   | { type: 'confirm_response'; confirmRequestId: string; approved: boolean }
   | { type: 'terminal_open'; terminalId: string; cols: number; rows: number }

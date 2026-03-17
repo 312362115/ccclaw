@@ -128,16 +128,6 @@ function makeRequest(
     params: {
       sessionId,
       message,
-      apiKey: 'test-key',
-      providerType: 'claude',
-      context: {
-        systemPrompt: 'You are a test assistant.',
-        memories: [],
-        skills: [],
-        history: [],
-        preferences: {},
-        mcpServers: [],
-      },
     },
   };
 }
