@@ -1,19 +1,45 @@
 // WebSocket 客户端 — 与 Server 通信
 import { getAccessToken } from './client';
 
-export type WsMessageType = 'auth_ok' | 'text_delta' | 'tool_use' | 'confirm_request' | 'done' | 'error';
+export type WsMessageType =
+  | 'auth_ok'
+  | 'text_delta'
+  | 'tool_use'
+  | 'tool_use_start'
+  | 'tool_use_delta'
+  | 'tool_use_end'
+  | 'tool_result'
+  | 'thinking_delta'
+  | 'consolidation'
+  | 'confirm_request'
+  | 'done'
+  | 'session_done'
+  | 'subagent_started'
+  | 'subagent_result'
+  | 'error';
 
 export interface WsIncoming {
   type: WsMessageType;
   sessionId?: string;
+  // text_delta
   content?: string;
   text?: string;
+  // tool_use (legacy) / tool_use_start / tool_use_delta / tool_use_end / tool_result
   tool?: string;
   input?: unknown;
+  toolId?: string;
+  name?: string;
+  output?: string;
+  // confirm_request
   requestId?: string;
   reason?: string;
-  tokens?: number;
+  // done / session_done
+  tokens?: { inputTokens: number; outputTokens: number } | number;
+  // consolidation / error
   message?: string;
+  // subagent_started / subagent_result
+  taskId?: string;
+  label?: string;
 }
 
 type MessageHandler = (msg: WsIncoming) => void;
