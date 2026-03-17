@@ -52,6 +52,7 @@ export const providers = pgTable('providers', {
   authType: varchar('auth_type', { length: 20 }).notNull().default('api_key'),
   config: jsonb('config').notNull(), // AES-256-GCM 加密
   isDefault: boolean('is_default').notNull().default(false),
+  oauthState: text('oauth_state'),  // JSON encrypted: { accessToken, refreshToken, expiresAt, scope }
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
@@ -148,6 +149,15 @@ export const refreshTokens = pgTable('refresh_tokens', {
   id: id(),
   userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   token: varchar('token', { length: 500 }).notNull().unique(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+export const oauthStates = pgTable('oauth_states', {
+  state: text('state').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  codeVerifier: text('code_verifier').notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });

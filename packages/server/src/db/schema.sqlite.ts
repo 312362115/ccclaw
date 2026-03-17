@@ -50,6 +50,7 @@ export const providers = sqliteTable('providers', {
   authType: text('auth_type').notNull().default('api_key'),
   config: text('config', { mode: 'json' }).notNull(), // AES-256-GCM 加密
   isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
+  oauthState: text('oauth_state'),  // JSON encrypted: { accessToken, refreshToken, expiresAt, scope }
   createdAt: createdAt(),
 });
 
@@ -147,4 +148,13 @@ export const refreshTokens = sqliteTable('refresh_tokens', {
   token: text('token').notNull().unique(),
   expiresAt: text('expires_at').notNull(),
   createdAt: createdAt(),
+});
+
+export const oauthStates = sqliteTable('oauth_states', {
+  state: text('state').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),              // 'claude' | 'gemini' | 'qwen'
+  codeVerifier: text('code_verifier').notNull(),
+  expiresAt: text('expires_at').notNull(),   // ISO 8601
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
 });

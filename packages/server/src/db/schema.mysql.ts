@@ -50,6 +50,7 @@ export const providers = mysqlTable('providers', {
   authType: varchar('auth_type', { length: 20 }).notNull().default('api_key'),
   config: json('config').notNull(),
   isDefault: boolean('is_default').notNull().default(false),
+  oauthState: text('oauth_state'),  // JSON encrypted: { accessToken, refreshToken, expiresAt, scope }
   createdAt: createdAt(),
 });
 
@@ -147,4 +148,13 @@ export const refreshTokens = mysqlTable('refresh_tokens', {
   token: varchar('token', { length: 500 }).notNull().unique(),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: createdAt(),
+});
+
+export const oauthStates = mysqlTable('oauth_states', {
+  state: varchar('state', { length: 255 }).primaryKey(),
+  userId: varchar('user_id', { length: 21 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: varchar('type', { length: 50 }).notNull(),
+  codeVerifier: text('code_verifier').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
 });
