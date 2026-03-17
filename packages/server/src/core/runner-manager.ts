@@ -18,6 +18,8 @@ export interface AgentRequest {
     sessionId: string;
     message: string;
     apiKey: string;
+    providerType?: string;
+    apiBase?: string;
     context: {
       memories: string[];
       skills: string[];

@@ -7,6 +7,7 @@ import { runnerManager } from './runner-manager.js';
 import type { AgentRequest, AgentResponse } from './runner-manager.js';
 import { messageBus } from '../bus/instance.js';
 import type { InboundMessage, OutboundMessage } from '../bus/index.js';
+import { OAuthTokenManager } from './oauth-token-manager.js';
 
 interface StreamCallback {
   onDelta: (msg: AgentResponse) => void;
@@ -75,7 +76,7 @@ export class AgentManager {
   }
 
   /** 解析 Provider：工作区绑定 > 用户默认 */
-  async resolveProvider(workspaceId: string, userId: string): Promise<{ apiKey: string; apiBase?: string }> {
+  async resolveProvider(workspaceId: string, userId: string): Promise<{ apiKey: string; apiBase?: string; providerType: string }> {
     const rows = await db.select().from(schema.workspaces)
       .where(eq(schema.workspaces.id, workspaceId)).limit(1);
     const settings = (rows[0]?.settings as any) || {};
@@ -98,8 +99,18 @@ export class AgentManager {
 
     if (!provider) throw new Error('没有可用的 Provider，请在个人设置中配置');
 
+    const providerType = provider.type as string;
+
+    // OAuth 认证：使用 OAuthTokenManager 获取有效 token
+    if (provider.authType === 'oauth' && provider.oauthState) {
+      const tokenManager = new OAuthTokenManager();
+      const apiKey = await tokenManager.getToken(provider.oauthState as string, config.ENCRYPTION_KEY, providerType);
+      return { apiKey, providerType };
+    }
+
+    // API Key 认证：解密 config 获取 key 和 apiBase
     const cfg = JSON.parse(decrypt(provider.config as string, config.ENCRYPTION_KEY));
-    return { apiKey: cfg.key, apiBase: cfg.apiBase };
+    return { apiKey: cfg.key, apiBase: cfg.apiBase, providerType };
   }
 
   /**
@@ -117,14 +128,14 @@ export class AgentManager {
     // 1. 组装上下文（主 DB 部分）
     const context = await this.assembleContext(workspaceId, userId);
 
-    // 2. 解析 Provider
-    const { apiKey } = await this.resolveProvider(workspaceId, userId);
+    // 2. 解析 Provider（含 OAuth token 刷新）
+    const { apiKey, apiBase, providerType } = await this.resolveProvider(workspaceId, userId);
 
     // 3. 确保 Runner 就绪，然后下发任务
     const { slug } = await runnerManager.ensureRunner(workspaceId);
     const request: AgentRequest = {
       method: 'run',
-      params: { sessionId, message, apiKey, context },
+      params: { sessionId, message, apiKey, providerType, apiBase, context },
     };
 
     await runnerManager.send(slug, request, (msg) => {
