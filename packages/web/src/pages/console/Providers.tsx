@@ -7,6 +7,8 @@ interface Provider {
   type: string;
   isDefault: boolean;
   createdAt: string;
+  authType?: 'api_key' | 'oauth';
+  oauthStatus?: 'authorized' | 'expired' | 'unauthorized';
 }
 
 interface ProviderDetail extends Provider {
@@ -32,6 +34,7 @@ export function Providers() {
   // 创建表单
   const [name, setName] = useState('');
   const [type, setType] = useState('claude');
+  const [authType, setAuthType] = useState<'api_key' | 'oauth'>('api_key');
   const [apiKey, setApiKey] = useState('');
   const [apiBase, setApiBase] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -73,16 +76,22 @@ export function Providers() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    const body: Record<string, unknown> = {
+      name, type,
+      authType,
+      isDefault: list.length === 0,
+    };
+    if (authType === 'api_key') {
+      body.config = { key: apiKey, ...(apiBase && { baseURL: apiBase }), models };
+    } else {
+      body.config = { models };
+    }
     await api('/providers', {
       method: 'POST',
-      body: JSON.stringify({
-        name, type,
-        config: { key: apiKey, ...(apiBase && { baseURL: apiBase }), models },
-        isDefault: list.length === 0,
-      }),
+      body: JSON.stringify(body),
     });
     setShowForm(false);
-    setName(''); setApiKey(''); setApiBase(''); setModels([]); setModelInput('');
+    setName(''); setApiKey(''); setApiBase(''); setModels([]); setModelInput(''); setAuthType('api_key');
     load();
   };
 
@@ -142,11 +151,48 @@ export function Providers() {
               <option value="litellm">LiteLLM</option>
             </select>
           </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>API Key</label>
-            <input placeholder="sk-..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} required type="password" style={inputStyle} />
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>认证方式</label>
+            <select
+              value={authType}
+              onChange={e => setAuthType(e.target.value as 'api_key' | 'oauth')}
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #ddd', borderRadius: 6 }}
+            >
+              <option value="api_key">API Key</option>
+              <option value="oauth">OAuth 登录</option>
+            </select>
           </div>
-          {showApiBase && (
+          {authType === 'oauth' ? (
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>OAuth 授权</label>
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(`/api/oauth/${type}/authorize`, '_blank', 'width=600,height=700');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  background: '#1a73e8',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 14,
+                }}
+              >
+                🔐 授权 {type === 'claude' ? 'Claude' : type === 'gemini' ? 'Google' : type === 'qwen' ? '通义千问' : type}
+              </button>
+              <p style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                点击后将跳转到{type}官方授权页面
+              </p>
+            </div>
+          ) : (
+            <div style={fieldStyle}>
+              <label style={labelStyle}>API Key</label>
+              <input placeholder="sk-..." value={apiKey} onChange={(e) => setApiKey(e.target.value)} required type="password" style={inputStyle} />
+            </div>
+          )}
+          {showApiBase && authType === 'api_key' && (
             <div style={fieldStyle}>
               <label style={labelStyle}>API Base URL</label>
               <input placeholder="如：https://your-litellm-proxy.com/v1" value={apiBase} onChange={(e) => setApiBase(e.target.value)} style={inputStyle} />
@@ -173,6 +219,7 @@ export function Providers() {
             <th style={thStyle}>名称</th>
             <th style={thStyle}>类型</th>
             <th style={thStyle}>默认</th>
+            <th style={thStyle}>授权状态</th>
             <th style={thStyle}>创建时间</th>
             <th style={thStyle}>操作</th>
           </tr>
@@ -180,9 +227,39 @@ export function Providers() {
         <tbody>
           {list.map((p) => (
             <tr key={p.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={tdStyle}>{p.name || '-'}</td>
+              <td style={tdStyle}>
+                <div>{p.name || '-'}</div>
+                <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                  {['vision', 'toolUse', 'thinking'].map(cap => (
+                    <span key={cap} style={{
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                      fontSize: 11,
+                      background: '#f0f0f0',
+                      color: '#666',
+                    }}>
+                      {cap === 'vision' ? '👁 视觉' : cap === 'toolUse' ? '🔧 工具' : '🧠 思考'}
+                    </span>
+                  ))}
+                </div>
+              </td>
               <td style={tdStyle}>{p.type}</td>
               <td style={tdStyle}>{p.isDefault ? '是' : '-'}</td>
+              <td style={tdStyle}>
+                {p.authType === 'oauth' && (
+                  <span style={{
+                    display: 'inline-block',
+                    padding: '2px 8px',
+                    borderRadius: 10,
+                    fontSize: 12,
+                    background: p.oauthStatus === 'authorized' ? '#e6f4ea' : '#fce8e6',
+                    color: p.oauthStatus === 'authorized' ? '#137333' : '#c5221f',
+                  }}>
+                    {p.oauthStatus === 'authorized' ? '已授权' :
+                     p.oauthStatus === 'expired' ? '已过期' : '未授权'}
+                  </span>
+                )}
+              </td>
               <td style={tdStyle}>{new Date(p.createdAt).toLocaleDateString()}</td>
               <td style={tdStyle}>
                 <button onClick={() => openEdit(p)} style={linkBtnStyle}>编辑</button>
