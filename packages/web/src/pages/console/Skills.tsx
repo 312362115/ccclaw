@@ -5,8 +5,12 @@ interface Skill {
   id: string;
   name: string;
   description: string;
+  content: string;
   workspaceId?: string;
   updatedAt: string;
+  version?: string;
+  latestVersion?: string;
+  source?: 'builtin' | 'marketplace' | 'user';
 }
 
 export function Skills() {
@@ -15,18 +19,41 @@ export function Skills() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [content, setContent] = useState('');
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
 
   const load = () => api<Skill[]>('/skills').then(setList).catch(() => {});
   useEffect(() => { load(); }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await api('/skills', {
-      method: 'POST',
-      body: JSON.stringify({ name, description, content }),
-    });
+  const resetForm = () => {
+    setName('');
+    setDescription('');
+    setContent('');
+    setEditingSkill(null);
     setShowForm(false);
-    setName(''); setDescription(''); setContent('');
+  };
+
+  const handleEdit = (skill: Skill) => {
+    setEditingSkill(skill);
+    setName(skill.name);
+    setDescription(skill.description);
+    setContent(skill.content);
+    setShowForm(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingSkill) {
+      await api(`/skills/${editingSkill.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name, description, content }),
+      });
+    } else {
+      await api('/skills', {
+        method: 'POST',
+        body: JSON.stringify({ name, description, content }),
+      });
+    }
+    resetForm();
     load();
   };
 
@@ -34,11 +61,29 @@ export function Skills() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}>技能管理</h2>
-        <button onClick={() => setShowForm(!showForm)} style={btnStyle}>新建技能</button>
+        <button
+          onClick={() => {
+            if (showForm && !editingSkill) {
+              resetForm();
+            } else {
+              resetForm();
+              setShowForm(true);
+            }
+          }}
+          style={btnStyle}
+        >
+          新建技能
+        </button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} style={{ background: '#f9f9f9', padding: 16, borderRadius: 8, marginBottom: 16 }}>
+        <form onSubmit={handleSave} style={{ background: '#f9f9f9', padding: 16, borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#333' }}>
+              {editingSkill ? '编辑技能' : '创建技能'}
+            </span>
+            <button type="button" onClick={resetForm} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#999', lineHeight: 1 }}>×</button>
+          </div>
           <div style={fieldStyle}>
             <label style={labelStyle}>名称</label>
             <input placeholder="如：合同分析" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
@@ -51,7 +96,10 @@ export function Skills() {
             <label style={labelStyle}>技能内容（Markdown）</label>
             <textarea placeholder="在此编写技能提示词..." value={content} onChange={(e) => setContent(e.target.value)} required rows={6} style={{ ...inputStyle, resize: 'vertical' }} />
           </div>
-          <button type="submit" style={btnStyle}>保存</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="submit" style={btnStyle}>保存</button>
+            <button type="button" onClick={resetForm} style={{ ...btnStyle, background: '#f0f0f0', color: '#333' }}>取消</button>
+          </div>
         </form>
       )}
 
@@ -60,7 +108,9 @@ export function Skills() {
           <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
             <th style={thStyle}>名称</th>
             <th style={thStyle}>描述</th>
-            <th style={thStyle}>范围</th>
+            <th style={thStyle}>类型</th>
+            <th style={thStyle}>来源</th>
+            <th style={thStyle}>版本</th>
             <th style={thStyle}>操作</th>
           </tr>
         </thead>
@@ -69,9 +119,54 @@ export function Skills() {
             <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
               <td style={tdStyle}>{s.name}</td>
               <td style={tdStyle}>{s.description}</td>
-              <td style={tdStyle}>{s.workspaceId ? '工作区级' : '用户级'}</td>
               <td style={tdStyle}>
-                <button onClick={() => api(`/skills/${s.id}`, { method: 'DELETE' }).then(load)} style={{ background: 'none', border: 'none', color: '#d93025', cursor: 'pointer', fontSize: 13 }}>
+                <span style={{ marginRight: 4 }}>
+                  {s.content?.includes('command:') ? '⚡' : '📖'}
+                </span>
+                <span style={{ fontSize: 12, color: '#888' }}>
+                  {s.content?.includes('command:') ? '可执行' : '知识'}
+                </span>
+              </td>
+              <td style={tdStyle}>
+                <span style={{
+                  padding: '2px 8px',
+                  borderRadius: 10,
+                  fontSize: 11,
+                  background: s.source === 'builtin' ? '#e8f0fe' :
+                              s.source === 'marketplace' ? '#e6f4ea' : '#f5f5f5',
+                  color: s.source === 'builtin' ? '#1a73e8' :
+                         s.source === 'marketplace' ? '#137333' : '#666',
+                }}>
+                  {s.source === 'builtin' ? '系统预置' :
+                   s.source === 'marketplace' ? '市场' : '自建'}
+                </span>
+              </td>
+              <td style={{ padding: '8px 12px', fontSize: 13, color: '#666' }}>
+                {s.version || '-'}
+                {s.latestVersion && s.version !== s.latestVersion && (
+                  <span style={{
+                    marginLeft: 6,
+                    padding: '1px 6px',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    background: '#fff3e0',
+                    color: '#e65100',
+                  }}>
+                    可更新 → {s.latestVersion}
+                  </span>
+                )}
+              </td>
+              <td style={tdStyle}>
+                <button
+                  onClick={() => handleEdit(s)}
+                  style={{ background: 'none', border: 'none', color: '#1a73e8', cursor: 'pointer', fontSize: 13, marginRight: 8 }}
+                >
+                  编辑
+                </button>
+                <button
+                  onClick={() => api(`/skills/${s.id}`, { method: 'DELETE' }).then(load)}
+                  style={{ background: 'none', border: 'none', color: '#d93025', cursor: 'pointer', fontSize: 13 }}
+                >
                   删除
                 </button>
               </td>
