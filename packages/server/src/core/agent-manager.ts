@@ -1,6 +1,6 @@
 import { db, schema } from '../db/index.js';
 import { eq, and, isNull, or } from 'drizzle-orm';
-import { decrypt } from '@ccclaw/shared/crypto.js';
+import { decrypt } from '@ccclaw/shared';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { runnerManager } from './runner-manager.js';

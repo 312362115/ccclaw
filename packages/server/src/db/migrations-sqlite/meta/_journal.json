@@ -8,6 +8,13 @@
       "when": 1773593382072,
       "tag": "0000_ambiguous_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1773735700808,
+      "tag": "0001_tan_sandman",
+      "breakpoints": true
     }
   ]
 }
