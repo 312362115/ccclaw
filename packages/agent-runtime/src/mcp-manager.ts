@@ -6,29 +6,29 @@
  * - 支持 stdio / SSE / streamable-http 三种传输
  * - 工具命名：mcp_{serverName}_{toolName}
  * - enabledTools 白名单过滤
- * - 每次工具调用独立 30s 超时
+ * - 每次工具调用独立 30s 超时（transport 层内置）
  */
 
-import { execSync } from 'node:child_process';
-import type { ToolRegistry, Tool } from './tool-registry.js';
+import type { ToolRegistry } from './tool-registry.js';
+import { StdioTransport, HttpTransport, type MCPTransport, type JsonRpcRequest } from './mcp-transport.js';
+
+// ====== Logger ======
+
+const logger = {
+  warn: (msg: string) => console.warn(`[MCPManager] ${msg}`),
+};
 
 // ====== Types ======
 
 export interface MCPServerConfig {
-  name: string;
-  transport: 'stdio' | 'sse' | 'streamable-http';
-  command?: string;         // stdio: 启动命令
-  args?: string[];          // stdio: 命令参数
-  url?: string;             // sse/http: 服务地址
-  enabledTools?: string[];  // 白名单，不设则全部启用
-  timeout?: number;         // 单次调用超时（ms），默认 30000
+  command?: string;      // stdio mode
+  args?: string[];
   env?: Record<string, string>;
-}
-
-export interface MCPConnection {
-  config: MCPServerConfig;
-  connected: boolean;
-  tools: MCPToolInfo[];
+  transport?: 'stdio' | 'sse' | 'streamable-http';
+  url?: string;          // HTTP mode
+  headers?: Record<string, string>;
+  enabledTools?: string[];
+  timeout?: number;
 }
 
 export interface MCPToolInfo {
@@ -37,169 +37,129 @@ export interface MCPToolInfo {
   inputSchema?: Record<string, unknown>;
 }
 
-// ====== Constants ======
-
-const DEFAULT_TIMEOUT = 30_000;
+interface ActiveConnection {
+  transport: MCPTransport;
+  tools: MCPToolInfo[];
+}
 
 // ====== MCPManager ======
 
 export class MCPManager {
-  private connections = new Map<string, MCPConnection>();
+  private connections = new Map<string, ActiveConnection>();
+  private connected = false;
 
   constructor(
-    private servers: MCPServerConfig[],
+    private servers: Record<string, MCPServerConfig>,
     private toolRegistry: ToolRegistry,
-  ) {
-    // 初始化连接记录（不立即连接）
-    for (const server of servers) {
-      this.connections.set(server.name, {
-        config: server,
-        connected: false,
-        tools: [],
-      });
-    }
-  }
+  ) {}
 
   /** 幂等懒连接：确保所有 MCP Server 已连接 */
   async ensureConnected(): Promise<void> {
-    const connectTasks: Promise<void>[] = [];
+    if (this.connected) return;
+    this.connected = true;
 
-    for (const [name, conn] of this.connections) {
-      if (conn.connected) continue;
-      connectTasks.push(this.connectServer(name));
-    }
+    for (const [name, config] of Object.entries(this.servers)) {
+      try {
+        const transport = this.createTransport(config);
 
-    await Promise.allSettled(connectTasks);
-  }
+        // Initialize MCP session
+        let nextId = 1;
+        const initReq: JsonRpcRequest = {
+          jsonrpc: '2.0',
+          id: nextId++,
+          method: 'initialize',
+          params: { protocolVersion: '2024-11-05', capabilities: {} },
+        };
+        await transport.send(initReq);
 
-  /** 连接单个 MCP Server */
-  private async connectServer(name: string): Promise<void> {
-    const conn = this.connections.get(name);
-    if (!conn || conn.connected) return;
+        // Discover tools
+        const listReq: JsonRpcRequest = {
+          jsonrpc: '2.0',
+          id: nextId++,
+          method: 'tools/list',
+          params: {},
+        };
+        const listResp = await transport.send(listReq);
 
-    try {
-      const tools = await this.discoverTools(conn.config);
-
-      // 白名单过滤
-      const enabledTools = conn.config.enabledTools;
-      const filtered = enabledTools
-        ? tools.filter((t) => enabledTools.includes(t.name))
-        : tools;
-
-      conn.tools = filtered;
-      conn.connected = true;
-
-      // 注册到 ToolRegistry
-      const wrappedTools: Tool[] = filtered.map((t) =>
-        this.wrapMCPTool(conn.config, t),
-      );
-      this.toolRegistry.registerMCP(name, wrappedTools);
-    } catch (err) {
-      // 连接失败不阻塞其他 Server
-      conn.connected = false;
-      console.error(`[MCPManager] 连接 ${name} 失败:`, err);
-    }
-  }
-
-  /** 发现 MCP Server 提供的工具（简化实现） */
-  private async discoverTools(config: MCPServerConfig): Promise<MCPToolInfo[]> {
-    // 完整实现需要通过 MCP 协议（JSON-RPC over stdio/SSE/HTTP）
-    // 调用 tools/list 获取工具列表。
-    // 这里提供骨架，后续对接 @modelcontextprotocol/sdk 完善。
-
-    if (config.transport === 'stdio' && config.command) {
-      // stdio: 启动子进程，发送 tools/list 请求
-      // 简化：返回空列表，待 MCP SDK 集成后完善
-      return [];
-    }
-
-    if (config.transport === 'sse' || config.transport === 'streamable-http') {
-      // HTTP: 调用 URL 获取工具列表
-      if (config.url) {
-        try {
-          const res = await fetch(`${config.url}/tools/list`, {
-            signal: AbortSignal.timeout(config.timeout ?? DEFAULT_TIMEOUT),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { tools?: MCPToolInfo[] };
-            return data.tools ?? [];
-          }
-        } catch {
-          // 连接失败
+        if (listResp.error) {
+          logger.warn(`MCP ${name} tools/list failed: ${listResp.error.message}`);
+          transport.close();
+          continue;
         }
+
+        const tools = ((listResp.result as Record<string, unknown>)?.tools as MCPToolInfo[]) || [];
+        const filtered = this.filterByEnabledList(tools, config.enabledTools);
+
+        for (const tool of filtered) {
+          const capturedId = nextId++;
+          const capturedToolName = tool.name;
+          this.toolRegistry.register({
+            name: `mcp_${name}_${tool.name}`,
+            description: tool.description || '',
+            execute: (params) => this._callTool(transport, capturedId, capturedToolName, params),
+          });
+        }
+
+        this.connections.set(name, { transport, tools: filtered });
+      } catch (err) {
+        logger.warn(`MCP ${name} connection failed: ${err}`);
       }
     }
-
-    return [];
   }
 
-  /** 将 MCP 工具包装为 ToolRegistry 兼容的 Tool */
-  private wrapMCPTool(config: MCPServerConfig, toolInfo: MCPToolInfo): Tool {
-    return {
-      name: toolInfo.name,
-      description: toolInfo.description,
-      async execute(input) {
-        // 完整实现：通过 MCP 协议调用工具
-        // stdio: 向子进程发送 tools/call 请求
-        // HTTP: POST 到 {url}/tools/call
-        const timeout = config.timeout ?? DEFAULT_TIMEOUT;
+  /** 创建对应配置的传输实例 */
+  private createTransport(config: MCPServerConfig): MCPTransport {
+    if (config.transport === 'stdio' || (!config.transport && config.command)) {
+      if (!config.command) throw new Error('MCP stdio transport requires command');
+      return new StdioTransport(config.command, config.args || [], config.env);
+    }
+    // SSE or streamable-http
+    if (!config.url) throw new Error('MCP HTTP transport requires url');
+    return new HttpTransport(config.url, config.headers);
+  }
 
-        if (config.transport === 'stdio' && config.command) {
-          const inputJson = JSON.stringify(input);
-          try {
-            const result = execSync(
-              `echo '${inputJson.replace(/'/g, "'\\''")}' | ${config.command} ${(config.args ?? []).join(' ')}`,
-              {
-                encoding: 'utf-8',
-                timeout,
-                maxBuffer: 1024 * 1024,
-                env: { ...process.env, ...config.env },
-              },
-            );
-            return result;
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
-            throw new Error(`MCP tool "${toolInfo.name}" 执行失败: ${message}`);
-          }
-        }
-
-        if (config.url) {
-          const res = await fetch(`${config.url}/tools/call`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: toolInfo.name, arguments: input }),
-            signal: AbortSignal.timeout(timeout),
-          });
-          if (!res.ok) throw new Error(`MCP tool "${toolInfo.name}" HTTP ${res.status}`);
-          const data = (await res.json()) as { content?: string; result?: string };
-          return data.content ?? data.result ?? JSON.stringify(data);
-        }
-
-        throw new Error(`MCP tool "${toolInfo.name}" 无可用传输方式`);
-      },
+  /** 调用单个工具，通过 JSON-RPC tools/call */
+  private async _callTool(
+    transport: MCPTransport,
+    id: number,
+    toolName: string,
+    params: Record<string, unknown>,
+  ): Promise<string> {
+    const req: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id,
+      method: 'tools/call',
+      params: { name: toolName, arguments: params },
     };
+    const resp = await transport.send(req);
+    if (resp.error) return `Error: ${resp.error.message}`;
+    return JSON.stringify(resp.result);
+  }
+
+  /** 白名单过滤 */
+  private filterByEnabledList(tools: MCPToolInfo[], enabledTools?: string[]): MCPToolInfo[] {
+    if (!enabledTools) return tools;
+    return tools.filter((t) => enabledTools.includes(t.name));
   }
 
   /** 断开所有连接 */
   async disconnect(): Promise<void> {
-    for (const [name, conn] of this.connections) {
-      if (conn.connected) {
-        // 注销已注册的工具
-        for (const tool of conn.tools) {
-          this.toolRegistry.unregister(`mcp_${name}_${tool.name}`);
-        }
-        conn.connected = false;
-        conn.tools = [];
-      }
+    for (const [, conn] of this.connections) {
+      conn.transport.close();
     }
+    this.connections.clear();
+    this.connected = false;
   }
 
   /** 获取连接状态 */
   getStatus(): Array<{ name: string; connected: boolean; toolCount: number }> {
-    return [...this.connections.values()].map((conn) => ({
-      name: conn.config.name,
-      connected: conn.connected,
-      toolCount: conn.tools.length,
-    }));
+    return Object.keys(this.servers).map((name) => {
+      const conn = this.connections.get(name);
+      return {
+        name,
+        connected: conn !== undefined,
+        toolCount: conn?.tools.length ?? 0,
+      };
+    });
   }
 }
