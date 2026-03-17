@@ -105,7 +105,7 @@ export type LLMStreamEvent =
   | { type: 'tool_use_end'; toolCallId: string }
   | { type: 'usage'; usage: TokenUsage }
   | { type: 'done'; stopReason: StopReason }
-  | { type: 'error'; error: Error };
+  | { type: 'error'; error?: Error; message?: string };
 
 // ============================================================
 // Agent stream events  (emitted by the Agent Loop)

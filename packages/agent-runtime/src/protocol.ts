@@ -10,6 +10,7 @@ export interface AgentRequest {
     apiKey: string;
     providerType: string;    // 'claude' | 'openai' | 'gemini' | etc
     apiBase?: string;        // custom endpoint
+    model?: string;          // override default model
     context: {
       systemPrompt: string;
       memories: any[];

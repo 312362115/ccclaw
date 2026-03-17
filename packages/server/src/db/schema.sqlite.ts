@@ -48,7 +48,7 @@ export const providers = sqliteTable('providers', {
   name: text('name').notNull(),
   type: text('type').notNull().default('claude'),
   authType: text('auth_type').notNull().default('api_key'),
-  config: text('config', { mode: 'json' }).notNull(), // AES-256-GCM 加密
+  config: text('config').notNull(), // AES-256-GCM 加密后的 base64 字符串
   isDefault: integer('is_default', { mode: 'boolean' }).notNull().default(false),
   oauthState: text('oauth_state'),  // JSON encrypted: { accessToken, refreshToken, expiresAt, scope }
   createdAt: createdAt(),

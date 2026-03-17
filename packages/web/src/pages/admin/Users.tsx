@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { ContentPageShell } from '../../components/ContentPageShell';
 
 interface User {
   id: string;
@@ -22,37 +23,45 @@ export function Users() {
   };
 
   return (
-    <div>
-      <h2 style={{ marginTop: 0 }}>用户管理</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-            <th style={thStyle}>姓名</th>
-            <th style={thStyle}>邮箱</th>
-            <th style={thStyle}>角色</th>
-            <th style={thStyle}>注册时间</th>
-            <th style={thStyle}>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={tdStyle}>{u.name}</td>
-              <td style={tdStyle}>{u.email}</td>
-              <td style={tdStyle}>{u.role === 'admin' ? '管理员' : '用户'}</td>
-              <td style={tdStyle}>{new Date(u.createdAt).toLocaleDateString()}</td>
-              <td style={tdStyle}>
-                <button onClick={() => toggleRole(u)} style={{ background: 'none', border: 'none', color: '#1a73e8', cursor: 'pointer', fontSize: 13 }}>
-                  {u.role === 'admin' ? '降为用户' : '提升管理员'}
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ContentPageShell>
+      <div className="px-7 pt-7">
+        <h2 className="text-[22px] font-bold mb-1.5">用户管理</h2>
+        <p className="text-text-muted text-sm">管理平台用户</p>
+      </div>
+      <div className="px-7 py-6">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b-2 border-line">
+                {['姓名', '邮箱', '角色', '注册时间', '操作'].map((h) => (
+                  <th key={h} className="text-left px-3 py-2 text-[13px] text-text-muted font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-3 py-2.5 text-sm font-medium">{u.name}</td>
+                  <td className="px-3 py-2.5 text-sm text-text-muted">{u.email}</td>
+                  <td className="px-3 py-2.5 text-sm">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] ${
+                      u.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-slate-100 text-text-muted'
+                    }`}>
+                      {u.role === 'admin' ? '管理员' : '用户'}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-sm text-text-muted">{new Date(u.createdAt).toLocaleDateString()}</td>
+                  <td className="px-3 py-2.5">
+                    <button onClick={() => toggleRole(u)} className="text-accent text-[13px] hover:underline">
+                      {u.role === 'admin' ? '降为用户' : '提升管理员'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ContentPageShell>
   );
 }
-
-const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 12px', fontSize: 13, color: '#666' };
-const tdStyle: React.CSSProperties = { padding: '8px 12px', fontSize: 14 };

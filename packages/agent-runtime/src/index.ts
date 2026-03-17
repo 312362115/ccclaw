@@ -199,7 +199,7 @@ function handleServerMessage(msg: ServerMessage) {
   if (msg.type === 'request') {
     handleRequest(msg.requestId, msg.data).catch((err) => {
       console.error(`[runner:${RUNNER_ID}] 请求处理失败:`, err);
-      sendResponse(msg.requestId, { type: 'error', error: new Error(String(err)) });
+      sendResponse(msg.requestId, { type: 'error', message: err instanceof Error ? err.message : String(err) });
     });
     return;
   }
@@ -242,28 +242,32 @@ function handleServerMessage(msg: ServerMessage) {
 async function handleRequest(requestId: string, request: import('./protocol.js').AgentRequest) {
   // 路径安全检查：workspaceDir 必须在白名单内
   if (!isPathAllowed(WORKSPACE_DIR)) {
-    sendResponse(requestId, { type: 'error', error: new Error('工作区路径不在白名单中') });
+    sendResponse(requestId, { type: 'error', message: '工作区路径不在白名单中' });
     return;
   }
 
   const onStream = (msg: AgentResponse) => {
+    console.log(`[runner:${RUNNER_ID}] stream event: ${msg.type}`);
     sendResponse(requestId, msg);
   };
 
   // 根据请求上下文创建 LLM Provider（不同工作区可能使用不同 provider）
   let provider = null;
-  const { providerType, apiBase, apiKey } = request.params;
+  const { providerType, apiBase, apiKey, model } = request.params;
   if (apiKey) {
     try {
       provider = LLMProviderFactory.create({
         type: providerType || 'claude',
         apiKey,
         apiBase,
+        defaultModel: model,
       });
     } catch (err) {
       console.warn(`[runner:${RUNNER_ID}] Provider 创建失败:`, err);
     }
   }
+
+  console.log(`[runner:${RUNNER_ID}] handleRequest: provider=${providerType}, apiBase=${apiBase}, model=${model}, hasProvider=${!!provider}`);
 
   const deps: AgentDeps | undefined = sharedDeps
     ? { ...sharedDeps, provider }

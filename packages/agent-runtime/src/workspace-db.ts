@@ -143,6 +143,10 @@ export class WorkspaceDB {
 
   createSession(session: NewSession): Session {
     const id = nanoid();
+    return this.createSessionWithId(id, session);
+  }
+
+  createSessionWithId(id: string, session: NewSession): Session {
     const stmt = this.db.prepare(`
       INSERT INTO sessions (id, workspace_id, user_id, channel_type, title)
       VALUES (?, ?, ?, ?, ?)

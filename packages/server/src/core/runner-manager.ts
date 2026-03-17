@@ -20,6 +20,7 @@ export interface AgentRequest {
     apiKey: string;
     providerType?: string;
     apiBase?: string;
+    model?: string;
     context: {
       memories: string[];
       skills: string[];
@@ -91,7 +92,7 @@ export class RunnerManager {
           const pending = this.pendingRequests.get(msg.requestId);
           if (pending) {
             pending.onMessage(msg.data as AgentResponse);
-            if (msg.data.type === 'done' || msg.data.type === 'error') {
+            if (msg.data.type === 'done' || msg.data.type === 'session_done' || msg.data.type === 'error') {
               clearTimeout(pending.timer);
               pending.resolve();
               this.pendingRequests.delete(msg.requestId);
@@ -184,7 +185,7 @@ export class RunnerManager {
     const serverUrl = `ws://127.0.0.1:${config.PORT}/ws/runner`;
 
     const child: ChildProcess = fork(
-      join(process.cwd(), 'node_modules/@ccclaw/agent-runtime/dist/index.js'),
+      join(process.cwd(), '..', 'agent-runtime', 'dist', 'index.js'),
       ['--mode', 'runner'],
       {
         cwd: paths.home,

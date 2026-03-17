@@ -8,31 +8,25 @@ interface Props {
 
 export function ConfirmDialog({ title, message, detail, onApprove, onReject }: Props) {
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-      display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000,
-    }}>
-      <div style={{
-        background: '#fff', borderRadius: 8, padding: 24, maxWidth: 480, width: '90%',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
-      }}>
-        <h3 style={{ margin: '0 0 12px', color: '#d93025' }}>{title}</h3>
-        <p style={{ margin: '0 0 8px', fontSize: 14 }}>{message}</p>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[1000] animate-fade-in">
+      <div className="bg-white rounded-2xl p-6 max-w-md w-[90%] shadow-lg">
+        <h3 className="text-base font-bold mb-3 text-danger">{title}</h3>
+        <p className="text-sm mb-2">{message}</p>
         {detail && (
-          <pre style={{ margin: '0 0 16px', fontSize: 12, background: '#f5f5f5', padding: 8, borderRadius: 4, overflow: 'auto', maxHeight: 200 }}>
+          <pre className="mb-4 text-xs bg-slate-50 border border-line p-2.5 rounded-lg overflow-auto max-h-[200px]">
             {detail}
           </pre>
         )}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div className="flex gap-2 justify-end">
           <button
             onClick={onReject}
-            style={{ padding: '8px 16px', border: '1px solid #ddd', borderRadius: 4, background: '#fff', cursor: 'pointer' }}
+            className="px-4 py-2 border border-line rounded-lg bg-white text-sm hover:bg-slate-50 transition-colors"
           >
             拒绝
           </button>
           <button
             onClick={onApprove}
-            style={{ padding: '8px 16px', border: 'none', borderRadius: 4, background: '#d93025', color: '#fff', cursor: 'pointer' }}
+            className="px-4 py-2 rounded-lg bg-danger text-white text-sm hover:bg-red-600 transition-colors"
           >
             允许
           </button>

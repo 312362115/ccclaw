@@ -42,7 +42,7 @@ authRouter.post('/login', async (c) => {
     path: '/api/auth',
   });
 
-  return c.json({ accessToken, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  return c.json({ accessToken, refreshToken, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
 });
 
 authRouter.post('/logout', authMiddleware, async (c) => {
@@ -53,7 +53,14 @@ authRouter.post('/logout', authMiddleware, async (c) => {
 });
 
 authRouter.post('/refresh', async (c) => {
-  const token = getCookie(c, 'refresh_token');
+  // 同时支持 cookie 和 body 两种方式
+  let token = getCookie(c, 'refresh_token');
+  if (!token) {
+    try {
+      const body = await c.req.json();
+      token = body.refreshToken;
+    } catch { /* ignore */ }
+  }
   if (!token) return c.json({ error: 'Refresh token 缺失' }, 401);
 
   const userId = await validateRefreshToken(token);
@@ -74,7 +81,7 @@ authRouter.post('/refresh', async (c) => {
     path: '/api/auth',
   });
 
-  return c.json({ accessToken });
+  return c.json({ accessToken, refreshToken: newRefreshToken });
 });
 
 authRouter.get('/me', authMiddleware, async (c) => {

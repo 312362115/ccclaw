@@ -76,10 +76,11 @@ export class AgentManager {
   }
 
   /** 解析 Provider：工作区绑定 > 用户默认 */
-  async resolveProvider(workspaceId: string, userId: string): Promise<{ apiKey: string; apiBase?: string; providerType: string }> {
+  async resolveProvider(workspaceId: string, userId: string): Promise<{ apiKey: string; apiBase?: string; providerType: string; model?: string }> {
     const rows = await db.select().from(schema.workspaces)
       .where(eq(schema.workspaces.id, workspaceId)).limit(1);
     const settings = (rows[0]?.settings as any) || {};
+    const workspaceModel: string | undefined = settings.model;
 
     let provider;
 
@@ -110,7 +111,10 @@ export class AgentManager {
 
     // API Key 认证：解密 config 获取 key 和 apiBase
     const cfg = JSON.parse(decrypt(provider.config as string, config.ENCRYPTION_KEY));
-    return { apiKey: cfg.key, apiBase: cfg.apiBase, providerType };
+    let apiBase = cfg.baseURL || cfg.apiBase;
+    // 去掉尾部 /v1，OpenAI adapter 会自动拼接
+    if (typeof apiBase === 'string') apiBase = apiBase.replace(/\/v1\/?$/, '');
+    return { apiKey: cfg.key, apiBase, providerType, model: workspaceModel };
   }
 
   /**
@@ -129,17 +133,17 @@ export class AgentManager {
     const context = await this.assembleContext(workspaceId, userId);
 
     // 2. 解析 Provider（含 OAuth token 刷新）
-    const { apiKey, apiBase, providerType } = await this.resolveProvider(workspaceId, userId);
+    const { apiKey, apiBase, providerType, model } = await this.resolveProvider(workspaceId, userId);
 
     // 3. 确保 Runner 就绪，然后下发任务
     const { slug } = await runnerManager.ensureRunner(workspaceId);
     const request: AgentRequest = {
       method: 'run',
-      params: { sessionId, message, apiKey, providerType, apiBase, context },
+      params: { sessionId, message, apiKey, providerType, apiBase, model, context },
     };
 
     await runnerManager.send(slug, request, (msg) => {
-      if (msg.type === 'done') callbacks.onDone(msg);
+      if (msg.type === 'done' || msg.type === 'session_done') callbacks.onDone(msg);
       else if (msg.type === 'error') callbacks.onError(msg);
       else callbacks.onDelta(msg);
     });
@@ -153,11 +157,13 @@ export class AgentManager {
     messageBus.onInbound((msg: InboundMessage) => {
       if (msg.type === 'user_message') {
         this.handleInboundMessage(msg).catch((err) => {
-          logger.error(err, `Bus inbound 处理失败: session=${msg.sessionId}`);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const errStack = err instanceof Error ? err.stack : '';
+          logger.error({ err: errMsg, stack: errStack }, `Bus inbound 处理失败: session=${msg.sessionId}`);
           messageBus.publishOutbound({
             type: 'error',
             sessionId: msg.sessionId,
-            message: String(err),
+            message: errMsg || '未知错误',
           });
         });
       }
@@ -190,18 +196,22 @@ export class AgentManager {
       onDelta: (m) => messageBus.publishOutbound({
         type: 'text_delta',
         sessionId,
-        content: String(m.text ?? m.content ?? ''),
+        content: String((m as any).delta ?? (m as any).text ?? (m as any).content ?? ''),
       }),
       onDone: (m) => messageBus.publishOutbound({
         type: 'done',
         sessionId,
         tokens: (m.tokens as number) ?? 0,
       }),
-      onError: (m) => messageBus.publishOutbound({
-        type: 'error',
-        sessionId,
-        message: String(m.message ?? '未知错误'),
-      }),
+      onError: (m) => {
+        const errMsg = m.message || (m.error instanceof Error ? m.error.message : null) || (typeof m.error === 'string' ? m.error : null) || '未知错误';
+        logger.error({ agentError: errMsg }, 'Agent onError');
+        messageBus.publishOutbound({
+          type: 'error',
+          sessionId,
+          message: errMsg,
+        });
+      },
     };
 
     await this.chat(workspaceId, userId, sessionId, content, callbacks);

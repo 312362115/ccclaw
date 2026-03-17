@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { ContentPageShell } from '../../components/ContentPageShell';
+import { Button } from '../../components/ui/Button';
 
 interface InviteCode {
   id: string;
@@ -32,47 +34,53 @@ export function InviteCodes() {
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>邀请码</h2>
-        <button onClick={generate} disabled={generating} style={btnStyle}>
-          {generating ? '生成中...' : '生成 5 个邀请码'}
-        </button>
+    <ContentPageShell>
+      <div className="px-7 pt-7">
+        <div className="flex items-center justify-between mb-1.5">
+          <h2 className="text-[22px] font-bold">邀请码</h2>
+          <Button onClick={generate} disabled={generating}>
+            {generating ? '生成中...' : '生成 5 个邀请码'}
+          </Button>
+        </div>
+        <p className="text-text-muted text-sm">管理用户邀请码</p>
       </div>
 
-      {newCodes.length > 0 && (
-        <div style={{ background: '#e8f5e9', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, color: '#2e7d32', marginBottom: 8 }}>新生成的邀请码：</div>
-          {newCodes.map((code) => (
-            <div key={code} style={{ fontFamily: 'monospace', fontSize: 16, padding: '4px 0' }}>{code}</div>
-          ))}
-        </div>
-      )}
+      <div className="px-7 py-6">
+        {newCodes.length > 0 && (
+          <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl mb-5 animate-fade-in">
+            <div className="text-[13px] text-emerald-700 font-medium mb-2">新生成的邀请码：</div>
+            {newCodes.map((code) => (
+              <div key={code} className="font-mono text-base py-0.5 text-emerald-900">{code}</div>
+            ))}
+          </div>
+        )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-            <th style={thStyle}>邀请码</th>
-            <th style={thStyle}>状态</th>
-            <th style={thStyle}>使用者</th>
-            <th style={thStyle}>创建时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          {codes.map((c) => (
-            <tr key={c.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={tdStyle}><code>{c.code}</code></td>
-              <td style={tdStyle}>{c.usedBy ? <span style={{ color: '#999' }}>已使用</span> : <span style={{ color: '#2e7d32' }}>可用</span>}</td>
-              <td style={tdStyle}>{c.usedBy || '-'}</td>
-              <td style={tdStyle}>{new Date(c.createdAt).toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b-2 border-line">
+                {['邀请码', '状态', '使用者', '创建时间'].map((h) => (
+                  <th key={h} className="text-left px-3 py-2 text-[13px] text-text-muted font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {codes.map((c) => (
+                <tr key={c.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-3 py-2.5 text-sm"><code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded font-mono">{c.code}</code></td>
+                  <td className="px-3 py-2.5 text-sm">
+                    {c.usedBy
+                      ? <span className="px-2 py-0.5 rounded-full text-[11px] bg-slate-100 text-text-muted">已使用</span>
+                      : <span className="px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 text-emerald-700">可用</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-sm text-text-muted">{c.usedBy || '-'}</td>
+                  <td className="px-3 py-2.5 text-sm text-text-muted">{new Date(c.createdAt).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ContentPageShell>
   );
 }
-
-const btnStyle: React.CSSProperties = { padding: '6px 16px', background: '#c62828', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14 };
-const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 12px', fontSize: 13, color: '#666' };
-const tdStyle: React.CSSProperties = { padding: '8px 12px', fontSize: 14 };

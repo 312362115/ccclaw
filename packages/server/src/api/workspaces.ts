@@ -5,6 +5,7 @@ import { createWorkspaceSchema, updateWorkspaceSchema, slugId } from '@ccclaw/sh
 import { authMiddleware } from '../middleware/auth.js';
 import { requireWorkspaceAccess } from '../auth/rbac.js';
 import { audit } from '../middleware/audit.js';
+import { initWorkspaceStorage } from '../core/workspace-storage.js';
 import type { AppEnv } from '../types.js';
 
 function generateSlug(): string {
@@ -41,6 +42,9 @@ workspacesRouter.post('/', async (c) => {
     createdBy: user.sub,
     gitRepo: body.data.gitRepo ?? null,
   } as any).returning();
+
+  // 初始化工作区存储目录（home, internal, skills, workspace.db 等）
+  await initWorkspaceStorage(slug, body.data.gitRepo);
 
   await audit(c, 'workspace.create', workspace.id);
   return c.json(workspace, 201);

@@ -77,6 +77,11 @@ export async function runAgent(
       await mcpManager.ensureConnected();
     }
 
+    // 0. 确保 session 存在（前端可能传入新的 sessionId）
+    if (!db.getSession(sessionId)) {
+      db.createSessionWithId(sessionId, { workspace_id: 'default', user_id: 'default', title: '新会话' });
+    }
+
     // 1. 追加用户消息
     db.appendMessage({ session_id: sessionId, role: 'user', content: message });
 
@@ -110,6 +115,7 @@ export async function runAgent(
       // 构建 ChatParams
       const chatParams: ChatParams = {
         model:
+          request.params.model ||
           context?.preferences?.agentModel ||
           'claude-sonnet-4-20250514',
         messages: history,
@@ -273,6 +279,6 @@ export async function runAgent(
     });
   } catch (err: unknown) {
     const errMessage = err instanceof Error ? err.message : String(err);
-    onStream({ type: 'error', error: new Error(`Agent 执行错误: ${errMessage}`) });
+    onStream({ type: 'error', message: `Agent 执行错误: ${errMessage}` });
   }
 }

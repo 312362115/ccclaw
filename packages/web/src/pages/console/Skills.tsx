@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client';
+import { ContentPageShell } from '../../components/ContentPageShell';
+import { Button } from '../../components/ui/Button';
 
 interface Skill {
   id: string;
@@ -13,6 +15,9 @@ interface Skill {
   source?: 'builtin' | 'marketplace' | 'user';
 }
 
+const inputClass = 'block w-full px-3 py-1.5 border border-line rounded-lg text-sm bg-white focus:outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10';
+const labelClass = 'block mb-1 text-[13px] font-medium text-text-primary';
+
 export function Skills() {
   const [list, setList] = useState<Skill[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -25,11 +30,8 @@ export function Skills() {
   useEffect(() => { load(); }, []);
 
   const resetForm = () => {
-    setName('');
-    setDescription('');
-    setContent('');
-    setEditingSkill(null);
-    setShowForm(false);
+    setName(''); setDescription(''); setContent('');
+    setEditingSkill(null); setShowForm(false);
   };
 
   const handleEdit = (skill: Skill) => {
@@ -43,144 +45,104 @@ export function Skills() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingSkill) {
-      await api(`/skills/${editingSkill.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ name, description, content }),
-      });
+      await api(`/skills/${editingSkill.id}`, { method: 'PATCH', body: JSON.stringify({ name, description, content }) });
     } else {
-      await api('/skills', {
-        method: 'POST',
-        body: JSON.stringify({ name, description, content }),
-      });
+      await api('/skills', { method: 'POST', body: JSON.stringify({ name, description, content }) });
     }
     resetForm();
     load();
   };
 
+  const sourceColors: Record<string, string> = {
+    builtin: 'bg-accent-soft text-accent',
+    marketplace: 'bg-emerald-50 text-emerald-700',
+    user: 'bg-slate-100 text-text-muted',
+  };
+
+  const sourceLabels: Record<string, string> = {
+    builtin: '系统预置',
+    marketplace: '市场',
+    user: '自建',
+  };
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <h2 style={{ margin: 0 }}>技能管理</h2>
-        <button
-          onClick={() => {
-            if (showForm && !editingSkill) {
-              resetForm();
-            } else {
-              resetForm();
-              setShowForm(true);
-            }
-          }}
-          style={btnStyle}
-        >
-          新建技能
-        </button>
+    <ContentPageShell>
+      <div className="px-7 pt-7">
+        <div className="flex items-center justify-between mb-1.5">
+          <h2 className="text-[22px] font-bold">技能管理</h2>
+          <Button onClick={() => { if (showForm && !editingSkill) resetForm(); else { resetForm(); setShowForm(true); } }}>新建技能</Button>
+        </div>
+        <p className="text-text-muted text-sm">管理 Agent 技能</p>
       </div>
 
-      {showForm && (
-        <form onSubmit={handleSave} style={{ background: '#f9f9f9', padding: 16, borderRadius: 8, marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: '#333' }}>
-              {editingSkill ? '编辑技能' : '创建技能'}
-            </span>
-            <button type="button" onClick={resetForm} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#999', lineHeight: 1 }}>×</button>
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>名称</label>
-            <input placeholder="如：合同分析" value={name} onChange={(e) => setName(e.target.value)} required style={inputStyle} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>描述</label>
-            <input placeholder="简要说明技能用途" value={description} onChange={(e) => setDescription(e.target.value)} required style={inputStyle} />
-          </div>
-          <div style={fieldStyle}>
-            <label style={labelStyle}>技能内容（Markdown）</label>
-            <textarea placeholder="在此编写技能提示词..." value={content} onChange={(e) => setContent(e.target.value)} required rows={6} style={{ ...inputStyle, resize: 'vertical' }} />
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="submit" style={btnStyle}>保存</button>
-            <button type="button" onClick={resetForm} style={{ ...btnStyle, background: '#f0f0f0', color: '#333' }}>取消</button>
-          </div>
-        </form>
-      )}
+      <div className="px-7 py-6">
+        {showForm && (
+          <form onSubmit={handleSave} className="bg-slate-50 border border-line rounded-2xl p-5 mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[15px] font-semibold">{editingSkill ? '编辑技能' : '创建技能'}</span>
+              <button type="button" onClick={resetForm} className="text-text-muted hover:text-text-primary text-lg leading-none">×</button>
+            </div>
+            <div className="mb-3">
+              <label className={labelClass}>名称</label>
+              <input placeholder="如：合同分析" value={name} onChange={(e) => setName(e.target.value)} required className={inputClass} />
+            </div>
+            <div className="mb-3">
+              <label className={labelClass}>描述</label>
+              <input placeholder="简要说明技能用途" value={description} onChange={(e) => setDescription(e.target.value)} required className={inputClass} />
+            </div>
+            <div className="mb-3">
+              <label className={labelClass}>技能内容（Markdown）</label>
+              <textarea placeholder="在此编写技能提示词..." value={content} onChange={(e) => setContent(e.target.value)} required rows={6}
+                className={`${inputClass} resize-y`} />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit">保存</Button>
+              <Button variant="ghost" type="button" onClick={resetForm}>取消</Button>
+            </div>
+          </form>
+        )}
 
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-            <th style={thStyle}>名称</th>
-            <th style={thStyle}>描述</th>
-            <th style={thStyle}>类型</th>
-            <th style={thStyle}>来源</th>
-            <th style={thStyle}>版本</th>
-            <th style={thStyle}>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.map((s) => (
-            <tr key={s.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-              <td style={tdStyle}>{s.name}</td>
-              <td style={tdStyle}>{s.description}</td>
-              <td style={tdStyle}>
-                <span style={{ marginRight: 4 }}>
-                  {s.content?.includes('command:') ? '⚡' : '📖'}
-                </span>
-                <span style={{ fontSize: 12, color: '#888' }}>
-                  {s.content?.includes('command:') ? '可执行' : '知识'}
-                </span>
-              </td>
-              <td style={tdStyle}>
-                <span style={{
-                  padding: '2px 8px',
-                  borderRadius: 10,
-                  fontSize: 11,
-                  background: s.source === 'builtin' ? '#e8f0fe' :
-                              s.source === 'marketplace' ? '#e6f4ea' : '#f5f5f5',
-                  color: s.source === 'builtin' ? '#1a73e8' :
-                         s.source === 'marketplace' ? '#137333' : '#666',
-                }}>
-                  {s.source === 'builtin' ? '系统预置' :
-                   s.source === 'marketplace' ? '市场' : '自建'}
-                </span>
-              </td>
-              <td style={{ padding: '8px 12px', fontSize: 13, color: '#666' }}>
-                {s.version || '-'}
-                {s.latestVersion && s.version !== s.latestVersion && (
-                  <span style={{
-                    marginLeft: 6,
-                    padding: '1px 6px',
-                    borderRadius: 8,
-                    fontSize: 11,
-                    background: '#fff3e0',
-                    color: '#e65100',
-                  }}>
-                    可更新 → {s.latestVersion}
-                  </span>
-                )}
-              </td>
-              <td style={tdStyle}>
-                <button
-                  onClick={() => handleEdit(s)}
-                  style={{ background: 'none', border: 'none', color: '#1a73e8', cursor: 'pointer', fontSize: 13, marginRight: 8 }}
-                >
-                  编辑
-                </button>
-                <button
-                  onClick={() => api(`/skills/${s.id}`, { method: 'DELETE' }).then(load)}
-                  style={{ background: 'none', border: 'none', color: '#d93025', cursor: 'pointer', fontSize: 13 }}
-                >
-                  删除
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b-2 border-line">
+                {['名称', '描述', '类型', '来源', '版本', '操作'].map((h) => (
+                  <th key={h} className="text-left px-3 py-2 text-[13px] text-text-muted font-medium">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((s) => (
+                <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                  <td className="px-3 py-2.5 text-sm font-medium">{s.name}</td>
+                  <td className="px-3 py-2.5 text-sm text-text-muted">{s.description}</td>
+                  <td className="px-3 py-2.5 text-sm">
+                    <span className="mr-1">{s.content?.includes('command:') ? '⚡' : '📖'}</span>
+                    <span className="text-xs text-text-muted">{s.content?.includes('command:') ? '可执行' : '知识'}</span>
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] ${sourceColors[s.source || 'user']}`}>
+                      {sourceLabels[s.source || 'user']}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-[13px] text-text-muted">
+                    {s.version || '-'}
+                    {s.latestVersion && s.version !== s.latestVersion && (
+                      <span className="ml-1.5 px-1.5 py-px rounded-md text-[11px] bg-amber-50 text-amber-700">
+                        可更新 → {s.latestVersion}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <button onClick={() => handleEdit(s)} className="text-accent text-[13px] hover:underline mr-2">编辑</button>
+                    <button onClick={() => api(`/skills/${s.id}`, { method: 'DELETE' }).then(load)} className="text-danger text-[13px] hover:underline">删除</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </ContentPageShell>
   );
 }
-
-const btnStyle: React.CSSProperties = { padding: '6px 16px', background: '#1a73e8', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14 };
-const fieldStyle: React.CSSProperties = { marginBottom: 12 };
-const labelStyle: React.CSSProperties = { display: 'block', marginBottom: 4, fontSize: 13, fontWeight: 500, color: '#333' };
-const inputStyle: React.CSSProperties = { display: 'block', width: '100%', padding: '6px 10px', border: '1px solid #ddd', borderRadius: 4, fontSize: 14, boxSizing: 'border-box' };
-const thStyle: React.CSSProperties = { textAlign: 'left', padding: '8px 12px', fontSize: 13, color: '#666' };
-const tdStyle: React.CSSProperties = { padding: '8px 12px', fontSize: 14 };

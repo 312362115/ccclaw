@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { sendMessage, sendConfirmResponse, onWsMessage, type WsIncoming } from '../api/ws';
+import { api } from '../api/client';
 
 export interface ChatMessage {
   id: string;
@@ -26,11 +27,13 @@ interface ChatState {
   messages: Map<string, ChatMessage[]>; // sessionId → messages
   streaming: boolean;
   streamBuffer: string;
+  streamError: string | null;
   currentSessionId: string | null;
   tokenUsage: Map<string, TokenUsage>; // sessionId → token usage
 
   setCurrentSession: (sessionId: string) => void;
   send: (workspaceId: string, sessionId: string, content: string) => void;
+  loadMessages: (workspaceId: string, sessionId: string) => Promise<void>;
   getMessages: (sessionId: string) => ChatMessage[];
   initWsListener: () => () => void;
 
@@ -56,6 +59,7 @@ interface ChatState {
   resolveConfirm: (workspaceId: string, sessionId: string, requestId: string, approved: boolean) => void;
 }
 
+export const EMPTY_MESSAGES: ChatMessage[] = [];
 let msgCounter = 0;
 function nextId() { return `msg-${Date.now()}-${++msgCounter}`; }
 
@@ -80,10 +84,31 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messages: new Map(),
   streaming: false,
   streamBuffer: '',
+  streamError: null,
   currentSessionId: null,
   tokenUsage: new Map(),
 
   setCurrentSession: (sessionId) => set({ currentSessionId: sessionId }),
+
+  loadMessages: async (workspaceId, sessionId) => {
+    // 已加载过则跳过
+    if (get().messages.has(sessionId)) return;
+    try {
+      const rows = await api<Array<{ id: string; role: string; content: string; created_at: string }>>(
+        `/workspaces/${workspaceId}/sessions/${sessionId}/messages`,
+      );
+      if (rows.length === 0) return;
+      const msgs: ChatMessage[] = rows.map((r) => ({
+        id: r.id,
+        role: (r.role === 'tool' ? 'tool' : r.role === 'user' ? 'user' : 'assistant') as ChatMessage['role'],
+        content: r.content,
+        timestamp: new Date(r.created_at).getTime(),
+      }));
+      const newMap = new Map(get().messages);
+      newMap.set(sessionId, msgs);
+      set({ messages: newMap });
+    } catch { /* 静默失败，新会话没有历史 */ }
+  },
 
   send: (workspaceId, sessionId, content) => {
     const state = get();
@@ -91,11 +116,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     msgs.push({ id: nextId(), role: 'user', content, timestamp: Date.now() });
     const newMap = new Map(state.messages);
     newMap.set(sessionId, msgs);
-    set({ messages: newMap, streaming: true, streamBuffer: '' });
+    set({ messages: newMap, streaming: true, streamBuffer: '', streamError: null });
     sendMessage(workspaceId, sessionId, content);
   },
 
-  getMessages: (sessionId) => get().messages.get(sessionId) || [],
+  getMessages: (sessionId) => get().messages.get(sessionId) || EMPTY_MESSAGES,
 
   // ── Tool streaming lifecycle ──────────────────────────────────────────────
 
@@ -347,18 +372,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
         return;
       }
 
-      // ── error ────────────────────────────────────────────────────────────
+      // ── error — 不新增消息，更新到 streamError 显示在气泡里 ──
       if (msg.type === 'error') {
-        const msgs = [...(state.messages.get(sessionId) || [])];
-        msgs.push({
-          id: nextId(),
-          role: 'assistant',
-          content: `[错误] ${msg.message}`,
-          timestamp: Date.now(),
-        });
-        const newMap = new Map(state.messages);
-        newMap.set(sessionId, msgs);
-        set({ messages: newMap, streaming: false, streamBuffer: '' });
+        set({ streamError: msg.message || '未知错误', streaming: false, streamBuffer: '' });
       }
     });
   },
