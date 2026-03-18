@@ -10,6 +10,7 @@ import { Dashboard } from './pages/console/Dashboard';
 import { Workspaces } from './pages/console/Workspaces';
 import { Providers } from './pages/console/Providers';
 import { Skills } from './pages/console/Skills';
+import { SkillMarketplace } from './pages/console/SkillMarketplace';
 import { Logs } from './pages/console/Logs';
 import { Settings } from './pages/console/Settings';
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -45,6 +46,7 @@ export function App() {
           <Route path="workspaces" element={<Workspaces />} />
           <Route path="providers" element={<Providers />} />
           <Route path="skills" element={<Skills />} />
+          <Route path="skill-marketplace" element={<SkillMarketplace />} />
           <Route path="logs" element={<Logs />} />
           <Route path="settings" element={<Settings />} />
         </Route>

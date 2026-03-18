@@ -6,6 +6,7 @@ import {
   WorkspaceIcon,
   KeyIcon,
   SkillIcon,
+  MarketplaceIcon,
   LogIcon,
   SettingsIcon,
   AdminIcon,
@@ -24,6 +25,7 @@ const mainNav: NavItem[] = [
   { to: '/workspaces', icon: WorkspaceIcon, label: '工作区' },
   { to: '/providers', icon: KeyIcon, label: 'API Key' },
   { to: '/skills', icon: SkillIcon, label: '技能' },
+  { to: '/skill-marketplace', icon: MarketplaceIcon, label: 'Skill 市场' },
   { to: '/logs', icon: LogIcon, label: '日志' },
   { to: '/settings', icon: SettingsIcon, label: '设置' },
 ];

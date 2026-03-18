@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../api/client';
 import { ContentPageShell } from '../../components/ContentPageShell';
 import { Button } from '../../components/ui/Button';
@@ -19,6 +20,7 @@ const inputClass = 'block w-full px-3 py-1.5 border border-line rounded-lg text-
 const labelClass = 'block mb-1 text-[13px] font-medium text-text-primary';
 
 export function Skills() {
+  const navigate = useNavigate();
   const [list, setList] = useState<Skill[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
@@ -70,7 +72,10 @@ export function Skills() {
       <div className="px-7 pt-7">
         <div className="flex items-center justify-between mb-1.5">
           <h2 className="text-[22px] font-bold">技能管理</h2>
-          <Button onClick={() => { if (showForm && !editingSkill) resetForm(); else { resetForm(); setShowForm(true); } }}>新建技能</Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => navigate('/skill-marketplace')}>Skill 市场</Button>
+            <Button onClick={() => { if (showForm && !editingSkill) resetForm(); else { resetForm(); setShowForm(true); } }}>新建技能</Button>
+          </div>
         </div>
         <p className="text-text-muted text-sm">管理 Agent 技能</p>
       </div>
