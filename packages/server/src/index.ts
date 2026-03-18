@@ -6,6 +6,7 @@ import { api } from './api/index.js';
 import { securityHeaders, corsMiddleware } from './middleware/security.js';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { createWebSocketHandler } from './channel/webui.js';
+import { createFeishuChannel } from './channel/feishu.js';
 import { runnerManager } from './core/runner-manager.js';
 import { startScheduler } from './core/scheduler.js';
 import { agentManager } from './core/agent-manager.js';
@@ -22,6 +23,12 @@ app.route('/api', api);
 
 // 健康检查
 app.get('/health', (c) => c.json({ status: 'ok' }));
+
+// Feishu 渠道（webhook 路由）
+const feishuChannel = createFeishuChannel();
+if (feishuChannel) {
+  app.route('/feishu', feishuChannel);
+}
 
 // 生产环境：托管 WebUI 静态文件
 if (config.NODE_ENV === 'production') {
