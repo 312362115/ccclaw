@@ -1,30 +1,16 @@
 import { useResizable } from '../../hooks/useResizable';
 import { CloseIcon } from '../../components/icons';
+import { useFileTreeStore } from '../../stores/file-tree';
 
-interface Props {
-  open: boolean;
-  fileName: string | null;
-  onClose: () => void;
-}
+export function FilePreviewPanel() {
+  const previewPath = useFileTreeStore((s) => s.previewPath);
+  const previewContent = useFileTreeStore((s) => s.previewContent);
+  const previewBinary = useFileTreeStore((s) => s.previewBinary);
+  const previewLoading = useFileTreeStore((s) => s.previewLoading);
+  const setPreview = useFileTreeStore((s) => s.setPreview);
 
-// Stub 预览内容
-const STUB_CONTENT = `// 文件预览（暂用 stub 数据）
-import { useState } from 'react';
+  const open = previewPath !== null;
 
-export function Component() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div>
-      <h1>计数器: {count}</h1>
-      <button onClick={() => setCount(c => c + 1)}>
-        增加
-      </button>
-    </div>
-  );
-}`;
-
-export function FilePreviewPanel({ open, fileName, onClose }: Props) {
   const { size, dragging, onMouseDown } = useResizable({
     storageKey: 'cc-preview-width',
     defaultSize: 480,
@@ -32,6 +18,11 @@ export function FilePreviewPanel({ open, fileName, onClose }: Props) {
     maxSize: 900,
     direction: 'horizontal',
   });
+
+  const handleClose = () => setPreview(null, null, false);
+
+  // 从路径提取文件名
+  const fileName = previewPath?.split('/').pop() ?? null;
 
   return (
     <>
@@ -59,11 +50,11 @@ export function FilePreviewPanel({ open, fileName, onClose }: Props) {
               {fileName || '未选择文件'}
             </div>
             <div className="text-[11px] text-text-muted mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">
-              src/components/{fileName} · 24 行
+              {previewPath || ''}
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="w-[30px] h-[30px] rounded-lg flex items-center justify-center text-text-muted shrink-0 transition-all duration-200 hover:bg-slate-100 hover:text-text-primary"
           >
             <CloseIcon className="w-4 h-4" />
@@ -72,9 +63,23 @@ export function FilePreviewPanel({ open, fileName, onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-auto">
-          <pre className="bg-slate-900 text-slate-200 px-[18px] py-4 font-mono text-xs leading-[1.7] whitespace-pre-wrap break-words min-h-full m-0">
-            {STUB_CONTENT}
-          </pre>
+          {previewLoading ? (
+            <div className="flex items-center justify-center h-full text-text-muted text-sm">
+              加载中...
+            </div>
+          ) : previewBinary ? (
+            <div className="flex items-center justify-center h-full text-text-muted text-sm">
+              二进制文件，无法预览
+            </div>
+          ) : previewContent !== null ? (
+            <pre className="bg-slate-900 text-slate-200 px-[18px] py-4 font-mono text-xs leading-[1.7] whitespace-pre-wrap break-words min-h-full m-0">
+              {previewContent}
+            </pre>
+          ) : (
+            <div className="flex items-center justify-center h-full text-text-muted text-sm">
+              无内容
+            </div>
+          )}
         </div>
       </div>
     </>

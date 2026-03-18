@@ -5,10 +5,18 @@ RUN apk add --no-cache git bash curl python3 make g++ gcc musl-dev
 
 RUN adduser -D -h /home/agent agent
 
+# 复制 shared 包（编译产物）
+COPY packages/shared/dist /shared/dist
+COPY packages/shared/package.json /shared/package.json
+
+# 复制 agent-runtime
 COPY packages/agent-runtime/dist /app
 COPY packages/agent-runtime/package.json /app/package.json
 WORKDIR /app
-RUN npm install --production
+
+# 将 workspace:* 替换为本地路径引用，然后安装
+RUN sed -i 's|"workspace:\*"|"file:/shared"|g' package.json && \
+    npm install --omit=dev
 
 # Remove build tools to reduce image size
 RUN apk del python3 make g++ gcc musl-dev

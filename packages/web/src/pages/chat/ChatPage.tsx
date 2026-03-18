@@ -6,8 +6,8 @@ import { api } from '../../api/client';
 import { WorkspacePanel } from '../../components/WorkspacePanel';
 import { ChatMain } from './ChatMain';
 import { FilePreviewPanel } from './FilePreviewPanel';
-import { FilePanel } from '../../components/workspace/FilePanel';
 import { useDirectConnection } from '../../hooks/useDirectConnection';
+import { useFileTreeStore } from '../../stores/file-tree';
 
 interface Workspace {
   id: string;
@@ -21,13 +21,11 @@ export function ChatPage() {
   const [currentWorkspace, setCurrentWorkspace] = useState<Workspace | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [terminalOpen, setTerminalOpen] = useState(false);
-  const [filePreviewOpen, setFilePreviewOpen] = useState(false);
-  const [previewFile, setPreviewFile] = useState<string | null>(null);
-  const [filePanelOpen, setFilePanelOpen] = useState(true);
   const initWsListener = useChatStore((s) => s.initWsListener);
   const loadMessages = useChatStore((s) => s.loadMessages);
+  const previewPath = useFileTreeStore((s) => s.previewPath);
 
-  // Direct WebSocket connection to Runner for file operations
+  // Runner 直连（文件树 + 聊天加密通道）
   const { sendDirectMessage } = useDirectConnection(currentWorkspace?.id ?? null);
 
   // WebSocket 连接
@@ -74,11 +72,7 @@ export function ChatPage() {
     loadMessages(workspaceId, sessionId);
   };
 
-  const handleFileSelect = (name: string) => {
-    setPreviewFile(name);
-    setFilePreviewOpen(true);
-  };
-
+  const filePreviewOpen = previewPath !== null;
   const sessionTitle = currentWorkspace?.name || '新会话';
 
   return (
@@ -89,7 +83,7 @@ export function ChatPage() {
         onSelectWorkspace={handleSelectWorkspace}
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
-        onFileSelect={handleFileSelect}
+        onSendDirectMessage={sendDirectMessage}
       />
 
       {/* 主区域 */}
@@ -103,18 +97,13 @@ export function ChatPage() {
               terminalOpen={terminalOpen}
               filePreviewOpen={filePreviewOpen}
               onToggleTerminal={() => setTerminalOpen(!terminalOpen)}
-              onToggleFilePreview={() => setFilePreviewOpen(!filePreviewOpen)}
+              onToggleFilePreview={() => {
+                if (filePreviewOpen) {
+                  useFileTreeStore.getState().setPreview(null, null, false);
+                }
+              }}
             />
-            <FilePreviewPanel
-              open={filePreviewOpen}
-              fileName={previewFile}
-              onClose={() => setFilePreviewOpen(false)}
-            />
-            {filePanelOpen && (
-              <div className="w-72 shrink-0 border-l border-line-soft bg-white overflow-hidden">
-                <FilePanel onSendDirectMessage={sendDirectMessage} />
-              </div>
-            )}
+            <FilePreviewPanel />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center bg-white">

@@ -6,7 +6,7 @@ import { AppShell } from './components/AppShell';
 import { AdminShell } from './components/AdminShell';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ChatPage } from './pages/chat/ChatPage';
-import { Dashboard } from './pages/console/Dashboard';
+import { Tasks } from './pages/console/Tasks';
 import { Workspaces } from './pages/console/Workspaces';
 import { Providers } from './pages/console/Providers';
 import { Skills } from './pages/console/Skills';
@@ -42,7 +42,7 @@ export function App() {
           <Route index element={<Navigate to="/chat" replace />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="chat/:workspaceId" element={<ChatPage />} />
-          <Route path="tasks" element={<Dashboard />} />
+          <Route path="tasks" element={<Tasks />} />
           <Route path="workspaces" element={<Workspaces />} />
           <Route path="providers" element={<Providers />} />
           <Route path="skills" element={<Skills />} />

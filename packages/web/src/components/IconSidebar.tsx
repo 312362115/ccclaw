@@ -21,7 +21,7 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { to: '/chat', icon: ChatIcon, label: '对话' },
-  { to: '/tasks', icon: DashboardIcon, label: '概览', end: true },
+  { to: '/tasks', icon: DashboardIcon, label: '定时任务', end: true },
   { to: '/workspaces', icon: WorkspaceIcon, label: '工作区' },
   { to: '/providers', icon: KeyIcon, label: 'API Key' },
   { to: '/skills', icon: SkillIcon, label: '技能' },

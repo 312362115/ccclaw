@@ -15,6 +15,7 @@ import { adminRouter } from './admin.js';
 import { oauthRouter } from './oauth.js';
 import { runnerInfoRoute } from './runner-info.js';
 import { skillMarketplaceRouter } from './skill-marketplace.js';
+import { runnerBootstrapRouter } from './runner-bootstrap.js';
 
 export const api = new Hono();
 
@@ -34,3 +35,4 @@ api.route('/invite-codes', inviteCodesRouter);
 api.route('/settings/preferences', preferencesRouter);
 api.route('/admin', adminRouter);
 api.route('/', runnerInfoRoute);          // /api/workspaces/:id/runner-info
+api.route('/', runnerBootstrapRouter);   // /api/runner-bootstrap + /api/runner-bundle

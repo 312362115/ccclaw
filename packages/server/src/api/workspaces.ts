@@ -41,6 +41,7 @@ workspacesRouter.post('/', async (c) => {
     slug,
     createdBy: user.sub,
     gitRepo: body.data.gitRepo ?? null,
+    settings: body.data.settings ?? {},
   } as any).returning();
 
   // 初始化工作区存储目录（home, internal, skills, workspace.db 等）

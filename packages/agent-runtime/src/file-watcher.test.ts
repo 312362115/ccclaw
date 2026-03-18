@@ -103,6 +103,9 @@ describe('FileWatcher', () => {
     watcher = new FileWatcher(tmpDir, { debounceMs: 50 });
     await watcher.start();
 
+    // macOS fs.watch({ recursive }) needs a moment to become ready
+    await new Promise(r => setTimeout(r, 100));
+
     const eventsPromise = waitForEvents(watcher, 1);
     await writeFile(filePath, 'updated');
     const events = await eventsPromise;

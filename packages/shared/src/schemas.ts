@@ -24,6 +24,7 @@ export const createWorkspaceSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(1).max(50).regex(/^[a-z0-9-]+$/).optional(),
   gitRepo: z.string().url().optional(),
+  settings: z.record(z.unknown()).optional(),
 });
 
 export const updateWorkspaceSchema = z.object({
