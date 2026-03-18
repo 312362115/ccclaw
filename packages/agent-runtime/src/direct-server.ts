@@ -52,7 +52,8 @@ export class DirectServer {
   }
 
   get directUrl(): string {
-    return `ws://${this._host}:${this.port}`;
+    const advertiseHost = process.env.DIRECT_SERVER_ADVERTISE_HOST || this._host;
+    return `ws://${advertiseHost}:${this.port}`;
   }
 
   setMessageHandler(handler: (clientId: string, msg: DirectMessage) => void): void {
@@ -71,8 +72,9 @@ export class DirectServer {
       this._handleConnection(ws);
     });
 
+    const port = parseInt(process.env.DIRECT_SERVER_PORT || '0');
     return new Promise<void>((resolve) => {
-      this._httpServer!.listen(0, this._host, () => resolve());
+      this._httpServer!.listen(port, this._host, () => resolve());
     });
   }
 

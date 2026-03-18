@@ -131,8 +131,11 @@ async function startDirectServer(): Promise<void> {
     const fileHandler = new FileHandler(WORKSPACE_DIR);
     const fileWatcher = new FileWatcher(WORKSPACE_DIR);
 
+    const DIRECT_HOST = process.env.DIRECT_SERVER_HOST || '127.0.0.1';
+
     directServer = new DirectServer({
       keyPair: registrationKeyPair,
+      host: DIRECT_HOST,
       verifyToken: async (token: string) => token === AUTH_TOKEN!,
       onMessage: (clientId: string, msg: DirectMessage) => handleDirectMessage(clientId, msg, treeHandler, fileHandler),
     });

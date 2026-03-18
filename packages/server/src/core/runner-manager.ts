@@ -144,10 +144,12 @@ export class RunnerManager {
     } else if (startMode === 'local') {
       await this.startLocalRunner(slug, runnerId);
     } else {
-      throw new Error(`Runner ${runnerId} 不在线，remote 模式需要手动部署 Runner`);
+      // remote mode: runner must connect on its own
+      logger.info({ runnerId }, 'Waiting for remote Runner to connect...');
     }
 
-    await this.waitForRunner(runnerId, 15_000);
+    const timeout = startMode === 'remote' ? 30_000 : 15_000;
+    await this.waitForRunner(runnerId, timeout);
     const connected = this.runners.get(runnerId);
     if (connected) connected.workspaces.add(slug);
     return { slug, runnerId };
@@ -156,10 +158,12 @@ export class RunnerManager {
   private async startDockerRunner(slug: string, runnerId: string) {
     const paths = getWorkspacePaths(slug);
     const serverUrl = `ws://host.docker.internal:${config.PORT}/ws/runner`;
+    const directPort = 10000 + Math.floor(Math.random() * 50000);
 
     const container = await docker.createContainer({
       Image: 'ccclaw-runner:latest',
       Labels: { [WORKSPACE_LABEL]: 'true', [`${WORKSPACE_LABEL}.slug`]: slug },
+      ExposedPorts: { [`${directPort}/tcp`]: {} },
       HostConfig: {
         Memory: SANDBOX_MEMORY_LIMIT,
         CpuQuota: SANDBOX_CPU_QUOTA,
@@ -171,6 +175,7 @@ export class RunnerManager {
         ],
         NetworkMode: 'bridge',
         ExtraHosts: ['host.docker.internal:host-gateway'],
+        PortBindings: { [`${directPort}/tcp`]: [{ HostPort: String(directPort) }] },
       },
       Env: [
         `RUNNER_ID=${runnerId}`,
@@ -180,13 +185,16 @@ export class RunnerManager {
         `INTERNAL_DIR=/internal`,
         `WORKSPACE_DB=/internal/workspace.db`,
         `ALLOWED_PATHS=/workspace:/skills:/internal/workspace.db`,
+        `DIRECT_SERVER_HOST=0.0.0.0`,
+        `DIRECT_SERVER_PORT=${directPort}`,
+        `DIRECT_SERVER_ADVERTISE_HOST=host.docker.internal`,
       ],
     });
 
     await container.start();
     const info = this.runners.get(runnerId);
     if (info) info.containerId = container.id;
-    logger.info({ slug, runnerId, containerId: container.id }, 'Docker Runner started');
+    logger.info({ slug, runnerId, containerId: container.id, directPort }, 'Docker Runner started');
   }
 
   private async startLocalRunner(slug: string, runnerId: string) {
