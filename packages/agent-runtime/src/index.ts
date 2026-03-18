@@ -190,6 +190,53 @@ function handleDirectMessage(
     return;
   }
 
+  if (channel === 'chat') {
+    if (action === 'message') {
+      const d = data as { sessionId: string; message: string };
+      if (!cachedProvider) {
+        sendError('NO_PROVIDER', 'Provider 未配置');
+        return;
+      }
+
+      const request: import('./protocol.js').AgentRequest = {
+        method: 'run',
+        params: { sessionId: d.sessionId, message: d.message },
+      };
+      const deps: AgentDeps | undefined = sharedDeps
+        ? { ...sharedDeps, provider: cachedProvider }
+        : undefined;
+
+      const onStream = (event: AgentResponse) => {
+        directServer?.sendToClient(clientId, {
+          channel: 'chat',
+          action: event.type,
+          requestId,
+          data: event,
+        });
+      };
+
+      runAgent(request, onStream, deps).catch((err) => {
+        directServer?.sendToClient(clientId, {
+          channel: 'chat',
+          action: 'error',
+          requestId,
+          data: { type: 'error', message: err instanceof Error ? err.message : String(err) },
+        });
+      });
+      return;
+    }
+
+    if (action === 'confirm_response') {
+      const d = data as { requestId: string; approved: boolean };
+      const resolver = pendingConfirms.get(d.requestId);
+      if (resolver) {
+        pendingConfirms.delete(d.requestId);
+        resolver(d.approved);
+      }
+      return;
+    }
+  }
+
   if (channel === 'file') {
     if (action === 'read') {
       const d = data as FileReadData;

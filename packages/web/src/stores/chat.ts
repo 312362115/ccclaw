@@ -23,6 +23,9 @@ interface TokenUsage {
   outputTokens: number;
 }
 
+/** Function type for sending messages over the direct channel */
+export type DirectSendFn = (msg: unknown) => void;
+
 interface ChatState {
   messages: Map<string, ChatMessage[]>; // sessionId → messages
   streaming: boolean;
@@ -31,8 +34,13 @@ interface ChatState {
   currentSessionId: string | null;
   tokenUsage: Map<string, TokenUsage>; // sessionId → token usage
 
+  /** Direct-channel send function — set by useDirectConnection when DIRECT */
+  directSend: DirectSendFn | null;
+  setDirectSend: (fn: DirectSendFn | null) => void;
+
   setCurrentSession: (sessionId: string) => void;
   send: (workspaceId: string, sessionId: string, content: string) => void;
+  appendStreamBuffer: (text: string) => void;
   loadMessages: (workspaceId: string, sessionId: string) => Promise<void>;
   getMessages: (sessionId: string) => ChatMessage[];
   initWsListener: () => () => void;
@@ -87,6 +95,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   streamError: null,
   currentSessionId: null,
   tokenUsage: new Map(),
+  directSend: null,
+
+  setDirectSend: (fn) => set({ directSend: fn }),
 
   setCurrentSession: (sessionId) => set({ currentSessionId: sessionId }),
 
@@ -117,7 +128,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newMap = new Map(state.messages);
     newMap.set(sessionId, msgs);
     set({ messages: newMap, streaming: true, streamBuffer: '', streamError: null });
-    sendMessage(workspaceId, sessionId, content);
+
+    if (state.directSend) {
+      // Send via direct encrypted channel
+      state.directSend({
+        channel: 'chat',
+        action: 'message',
+        requestId: `chat-${Date.now()}`,
+        data: { sessionId, message: content },
+      });
+    } else {
+      // Fallback to Server WS relay
+      sendMessage(workspaceId, sessionId, content);
+    }
+  },
+
+  appendStreamBuffer: (text) => {
+    set({ streamBuffer: get().streamBuffer + text });
   },
 
   getMessages: (sessionId) => get().messages.get(sessionId) || EMPTY_MESSAGES,
@@ -261,7 +288,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newMap = new Map(state.messages);
     newMap.set(sessionId, msgs);
     set({ messages: newMap });
-    sendConfirmResponse(workspaceId, sessionId, requestId, approved);
+
+    if (state.directSend) {
+      state.directSend({
+        channel: 'chat',
+        action: 'confirm_response',
+        data: { requestId, approved },
+      });
+    } else {
+      sendConfirmResponse(workspaceId, sessionId, requestId, approved);
+    }
   },
 
   // ── WebSocket listener ────────────────────────────────────────────────────
