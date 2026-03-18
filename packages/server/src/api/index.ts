@@ -13,6 +13,7 @@ import { inviteCodesRouter } from './invite-codes.js';
 import { preferencesRouter } from './preferences.js';
 import { adminRouter } from './admin.js';
 import { oauthRouter } from './oauth.js';
+import { runnerInfoRoute } from './runner-info.js';
 
 export const api = new Hono();
 
@@ -30,3 +31,4 @@ api.route('/dashboard', dashboardRouter);
 api.route('/invite-codes', inviteCodesRouter);
 api.route('/settings/preferences', preferencesRouter);
 api.route('/admin', adminRouter);
+api.route('/', runnerInfoRoute);          // /api/workspaces/:id/runner-info

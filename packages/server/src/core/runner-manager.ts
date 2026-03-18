@@ -2,7 +2,7 @@ import Docker from 'dockerode';
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
-import { nanoid } from '@ccclaw/shared';
+import { nanoid, generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, encrypt } from '@ccclaw/shared';
 import { WebSocket } from 'ws';
 import { db, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
@@ -54,6 +54,8 @@ interface RunnerInfo {
   containerId?: string;
   childProcess?: ChildProcess;
   terminalCallback?: (msg: Record<string, unknown>) => void;
+  publicKey?: string;      // Runner ECDH public key (base64)
+  directUrl?: string;      // Runner direct connect URL
 }
 
 interface PendingRequest {
@@ -113,6 +115,14 @@ export class RunnerManager {
 
     ws.send(JSON.stringify({ type: 'registered', runnerId }));
     logger.info({ runnerId, startMode }, 'Runner registered');
+  }
+
+  updateRunnerInfo(runnerId: string, publicKey?: string, directUrl?: string) {
+    const runner = this.runners.get(runnerId);
+    if (!runner) return;
+    if (publicKey) runner.publicKey = publicKey;
+    if (directUrl) runner.directUrl = directUrl;
+    logger.info({ runnerId, directUrl }, 'Runner info updated');
   }
 
   // ====== Runner 启动 ======
@@ -228,13 +238,27 @@ export class RunnerManager {
 
   // ====== 配置注入 ======
 
-  sendConfig(workspaceSlug: string, config: RuntimeConfig) {
+  sendConfig(workspaceSlug: string, runtimeConfig: RuntimeConfig) {
     const runnerId = this.bindings.get(workspaceSlug);
     if (!runnerId) return;
     const runner = this.runners.get(runnerId);
     if (!runner || runner.ws.readyState !== WebSocket.OPEN) return;
-    runner.ws.send(JSON.stringify({ type: 'config', data: config }));
-    logger.info({ runnerId, providerType: config.providerType, model: config.model }, 'Config pushed to runner');
+
+    if (runner.publicKey) {
+      const serverKP = generateECDHKeyPair();
+      const runnerPub = publicKeyFromBase64(runner.publicKey);
+      const sharedKey = deriveSharedKey(serverKP.privateKey, runnerPub);
+      const plaintext = JSON.stringify(runtimeConfig);
+      const encrypted = encrypt(plaintext, sharedKey.toString('hex'));
+      runner.ws.send(JSON.stringify({
+        type: 'config',
+        encrypted,
+        serverPublicKey: serverKP.publicKeyBase64,
+      }));
+    } else {
+      runner.ws.send(JSON.stringify({ type: 'config', data: runtimeConfig }));
+    }
+    logger.info({ runnerId, providerType: runtimeConfig.providerType, model: runtimeConfig.model }, 'Config pushed to runner');
   }
 
   // ====== 任务下发 ======
@@ -291,6 +315,16 @@ export class RunnerManager {
       return;
     }
     runner.ws.send(JSON.stringify({ type: 'confirm_response', confirmRequestId: requestId, approved }));
+  }
+
+  // ====== Runner 直连信息 ======
+
+  getRunnerInfo(workspaceSlug: string): { directUrl: string; fallback: boolean } | null {
+    const runnerId = this.bindings.get(workspaceSlug);
+    if (!runnerId) return null;
+    const runner = this.runners.get(runnerId);
+    if (!runner || runner.ws.readyState !== WebSocket.OPEN || !runner.directUrl) return null;
+    return { directUrl: runner.directUrl, fallback: true };
   }
 
   // ====== 状态查询 ======

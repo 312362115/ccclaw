@@ -6,6 +6,12 @@ import { resolve, join } from 'node:path';
 import { runAgent } from './agent.js';
 import type { AgentDeps } from './agent.js';
 import type { ServerMessage, AgentResponse } from './protocol.js';
+import { generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, decrypt as aesDecrypt } from '@ccclaw/shared';
+import { DirectServer } from './direct-server.js';
+import { FileWatcher } from './file-watcher.js';
+import { TreeHandler } from './handlers/tree-handler.js';
+import { FileHandler } from './handlers/file-handler.js';
+import type { DirectMessage, TreeListData, FileReadData, FileCreateData, FileDeleteData, FileStatData } from '@ccclaw/shared';
 
 // 模块导入
 import { WorkspaceDB } from './workspace-db.js';
@@ -36,6 +42,11 @@ if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
   console.error('缺少必需环境变量: RUNNER_ID, SERVER_URL, AUTH_TOKEN');
   process.exit(1);
 }
+
+// ====== ECDH 密钥对 & 直连服务 ======
+
+const registrationKeyPair = generateECDHKeyPair();
+let directServer: DirectServer | null = null;
 
 // ====== 模块初始化 ======
 
@@ -112,6 +123,99 @@ function isPathAllowed(targetPath: string): boolean {
   return ALLOWED_PATHS.some(base => resolved.startsWith(base));
 }
 
+// ====== 直连服务 ======
+
+async function startDirectServer(): Promise<void> {
+  try {
+    const treeHandler = new TreeHandler(WORKSPACE_DIR);
+    const fileHandler = new FileHandler(WORKSPACE_DIR);
+    const fileWatcher = new FileWatcher(WORKSPACE_DIR);
+
+    directServer = new DirectServer({
+      keyPair: registrationKeyPair,
+      verifyToken: async (token: string) => token === AUTH_TOKEN!,
+      onMessage: (clientId: string, msg: DirectMessage) => handleDirectMessage(clientId, msg, treeHandler, fileHandler),
+    });
+
+    await directServer.start();
+    await fileWatcher.start();
+
+    // Broadcast file events to all direct-connected clients
+    fileWatcher.on('events', (events) => {
+      directServer?.broadcastToAll({
+        channel: 'tree',
+        action: 'events',
+        data: { events },
+      });
+    });
+
+    console.log(`[runner:${RUNNER_ID}] 直连服务已启动: ${directServer.directUrl}`);
+  } catch (err) {
+    console.error(`[runner:${RUNNER_ID}] 直连服务启动失败:`, err);
+    directServer = null;
+  }
+}
+
+function handleDirectMessage(
+  clientId: string,
+  msg: DirectMessage,
+  treeHandler: TreeHandler,
+  fileHandler: FileHandler,
+): void {
+  const { channel, action, requestId, data } = msg;
+
+  const sendReply = (replyData: unknown) => {
+    if (!directServer || !requestId) return;
+    directServer.sendToClient(clientId, {
+      channel,
+      action: action + '_result',
+      requestId,
+      data: replyData,
+    });
+  };
+
+  const sendError = (code: string, message: string) => {
+    if (!directServer || !requestId) return;
+    directServer.sendToClient(clientId, {
+      channel,
+      action: 'error',
+      requestId,
+      data: { code, message },
+    });
+  };
+
+  if (channel === 'tree' && action === 'list') {
+    const d = data as TreeListData;
+    treeHandler.list(d.path, d.depth).then(sendReply).catch((err) => sendError('TREE_ERROR', String(err)));
+    return;
+  }
+
+  if (channel === 'file') {
+    if (action === 'read') {
+      const d = data as FileReadData;
+      fileHandler.read(d.path).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
+      return;
+    }
+    if (action === 'create') {
+      const d = data as FileCreateData;
+      fileHandler.create(d.path, d.type, d.content).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
+      return;
+    }
+    if (action === 'delete') {
+      const d = data as FileDeleteData;
+      fileHandler.delete(d.path).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
+      return;
+    }
+    if (action === 'stat') {
+      const d = data as FileStatData;
+      fileHandler.stat(d.path).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
+      return;
+    }
+  }
+
+  console.warn(`[runner:${RUNNER_ID}] 未知直连消息: ${channel}/${action}`);
+}
+
 // ====== WebSocket 连接 ======
 
 const HEARTBEAT_INTERVAL = 15_000;
@@ -130,6 +234,14 @@ function connect() {
     console.log(`[runner:${RUNNER_ID}] 已连接 Server`);
     reconnectAttempts = 0;
     startHeartbeat();
+
+    // Send ECDH registration with public key and direct URL
+    const registerMsg: import('./protocol.js').RunnerMessage = {
+      type: 'register',
+      publicKey: registrationKeyPair.publicKeyBase64,
+      directUrl: directServer?.directUrl ?? '',
+    };
+    sendToServer(registerMsg);
   });
 
   ws.on('message', (raw) => {
@@ -219,9 +331,21 @@ function handleServerMessage(msg: ServerMessage) {
     return;
   }
 
-  // 启动注入 / 变动下发
+  // 启动注入 / 变动下发（支持加密 config）
   if (msg.type === 'config') {
-    applyConfig(msg.data);
+    if (msg.encrypted && msg.serverPublicKey) {
+      try {
+        const serverPub = publicKeyFromBase64(msg.serverPublicKey);
+        const sharedKey = deriveSharedKey(registrationKeyPair.privateKey, serverPub);
+        const plaintext = aesDecrypt(msg.encrypted, sharedKey.toString('hex'));
+        const cfg = JSON.parse(plaintext) as import('./protocol.js').RuntimeConfig;
+        applyConfig(cfg);
+      } catch (err) {
+        console.error(`[runner:${RUNNER_ID}] 加密 config 解密失败:`, err);
+      }
+    } else if (msg.data) {
+      applyConfig(msg.data);
+    }
     return;
   }
 
@@ -317,4 +441,4 @@ process.on('SIGINT', shutdown);
 
 console.log(`[runner:${RUNNER_ID}] 启动，连接 ${SERVER_URL}`);
 initModules();
-connect();
+startDirectServer().then(() => connect());
