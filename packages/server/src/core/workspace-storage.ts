@@ -1,10 +1,12 @@
-import { mkdir, chmod, lstat, realpath, cp, readdir } from 'node:fs/promises';
-import { join, resolve, dirname } from 'node:path';
+import { mkdir, chmod, cp, readdir } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import Database from 'better-sqlite3';
+import { validatePath, validatePathStrict } from '@ccclaw/shared';
+export { validatePath, validatePathStrict };
 
 const execFileAsync = promisify(execFile);
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -69,36 +71,6 @@ export function getWorkspacePaths(slug: string) {
     skills: join(base, 'internal', 'skills'),
     wsDb: join(base, 'internal', 'workspace.db'),
   };
-}
-
-// 安全校验：确保路径在工作区范围内
-export function validatePath(basePath: string, userPath: string): string {
-  const resolved = resolve(basePath, userPath);
-  if (!resolved.startsWith(basePath)) {
-    throw new Error('路径越界：禁止访问工作区外的文件');
-  }
-  return resolved;
-}
-
-// 安全校验（含符号链接检查）
-export async function validatePathStrict(basePath: string, userPath: string): Promise<string> {
-  const resolved = resolve(basePath, userPath);
-  if (!resolved.startsWith(basePath)) {
-    throw new Error('路径越界：禁止访问工作区外的文件');
-  }
-
-  try {
-    const stat = await lstat(resolved);
-    if (stat.isSymbolicLink()) {
-      const real = await realpath(resolved);
-      if (!real.startsWith(basePath)) {
-        throw new Error('符号链接指向工作区外：拒绝访问');
-      }
-    }
-  } catch (err: any) {
-    if (err.code !== 'ENOENT') throw err;
-  }
-  return resolved;
 }
 
 // 构建子进程最小环境变量（防止泄露主服务密钥）
