@@ -108,7 +108,7 @@ export interface FileTreeState {
   previewChanged: boolean;
 
   // Connection
-  connectionState: 'INIT' | 'CONNECTING' | 'DIRECT' | 'RELAY' | 'DISCONNECTED';
+  connectionState: 'INIT' | 'CONNECTING' | 'DIRECT' | 'TUNNEL_CONNECTING' | 'TUNNEL' | 'RELAY' | 'DISCONNECTED';
 
   // Actions
   setEntries: (entries: TreeEntry[], truncated: boolean) => void;

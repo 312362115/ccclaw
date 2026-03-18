@@ -31,7 +31,8 @@ export type RunnerMessage =
   | { type: 'register'; publicKey: string; directUrl: string }
   | { type: 'response'; requestId: string; data: AgentResponse }
   | { type: 'terminal_output'; terminalId: string; data: string }
-  | { type: 'terminal_exit'; terminalId: string; code: number };
+  | { type: 'terminal_exit'; terminalId: string; code: number }
+  | { type: 'tunnel_frame'; clientId: string; data: string };
 
 // Server → Runner 消息
 export type ServerMessage =
@@ -43,4 +44,5 @@ export type ServerMessage =
   | { type: 'terminal_open'; terminalId: string; cols: number; rows: number }
   | { type: 'terminal_input'; terminalId: string; data: string }
   | { type: 'terminal_resize'; terminalId: string; cols: number; rows: number }
-  | { type: 'terminal_close'; terminalId: string };
+  | { type: 'terminal_close'; terminalId: string }
+  | { type: 'tunnel_frame'; clientId: string; data: string };

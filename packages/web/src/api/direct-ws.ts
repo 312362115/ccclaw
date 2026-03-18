@@ -1,7 +1,7 @@
 // DirectWsClient — 直连 Runner 的加密 WebSocket 客户端
 import { api, getAccessToken, ApiError } from './client';
 
-export type ConnectionState = 'INIT' | 'CONNECTING' | 'DIRECT' | 'RELAY' | 'DISCONNECTED';
+export type ConnectionState = 'INIT' | 'CONNECTING' | 'DIRECT' | 'TUNNEL_CONNECTING' | 'TUNNEL' | 'RELAY' | 'DISCONNECTED';
 
 interface DirectWsClientOptions {
   workspaceId: string;
@@ -178,22 +178,148 @@ export class DirectWsClient {
         this.ws = null;
         this.aesKey = null;
         if (!this.disposed) {
-          this.fallbackToRelay();
+          this.tryTunnel();
         }
       };
     } catch (err) {
       console.error('[DirectWs] Connection setup error', err);
-      this.fallbackToRelay();
+      this.tryTunnel();
     }
   }
 
   async send(msg: any): Promise<void> {
-    if (this.state !== 'DIRECT' || !this.ws || !this.aesKey) {
-      throw new Error('DirectWsClient is not in DIRECT state');
+    if ((this.state !== 'DIRECT' && this.state !== 'TUNNEL') || !this.ws || !this.aesKey) {
+      throw new Error('DirectWsClient is not in DIRECT or TUNNEL state');
     }
     const data = new TextEncoder().encode(JSON.stringify(msg));
     const frame = await this.encrypt(data);
     this.ws.send(frame);
+  }
+
+  /** Try tunnel connection through Server as a transparent encrypted pipe. */
+  private async tryTunnel(): Promise<void> {
+    if (this.disposed) return;
+    this.cleanup();
+    this.setState('TUNNEL_CONNECTING');
+
+    try {
+      // Generate ECDH P-256 keypair
+      const keyPair = await crypto.subtle.generateKey(
+        { name: 'ECDH', namedCurve: 'P-256' },
+        true,
+        ['deriveBits'],
+      );
+
+      const rawPub = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+      const base64Pub = btoa(String.fromCharCode(...new Uint8Array(rawPub)));
+
+      // Connect to tunnel endpoint on the Server
+      const token = getAccessToken();
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const tunnelUrl = `${protocol}//${location.host}/ws/tunnel?workspaceId=${this.workspaceId}&token=${token}`;
+      const ws = new WebSocket(tunnelUrl);
+      this.ws = ws;
+      ws.binaryType = 'arraybuffer';
+
+      // Handshake timeout
+      this.handshakeTimer = setTimeout(() => {
+        console.warn('[DirectWs] Tunnel handshake timeout');
+        ws.close();
+        this.fallbackToRelay();
+      }, HANDSHAKE_TIMEOUT_MS);
+
+      let handshakeDone = false;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: 'handshake', clientPublicKey: base64Pub }));
+      };
+
+      ws.onmessage = async (e: MessageEvent) => {
+        try {
+          if (!handshakeDone) {
+            // Handshake phase — expect JSON text or binary containing JSON
+            const data = typeof e.data === 'string'
+              ? e.data
+              : new TextDecoder().decode(e.data as ArrayBuffer);
+            const msg = JSON.parse(data);
+
+            if (msg.type === 'handshake_ok' && msg.runnerPublicKey) {
+              if (this.handshakeTimer) {
+                clearTimeout(this.handshakeTimer);
+                this.handshakeTimer = null;
+              }
+
+              const runnerPubBytes = Uint8Array.from(atob(msg.runnerPublicKey), c => c.charCodeAt(0));
+              const runnerPubKey = await crypto.subtle.importKey(
+                'raw',
+                runnerPubBytes,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                [],
+              );
+
+              const sharedBits = await crypto.subtle.deriveBits(
+                { name: 'ECDH', public: runnerPubKey },
+                keyPair.privateKey,
+                256,
+              );
+              this.aesKey = await crypto.subtle.importKey(
+                'raw',
+                sharedBits,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt'],
+              );
+
+              this.sendCounter = 0;
+              this.recvCounter = 0;
+              handshakeDone = true;
+              this.setState('TUNNEL');
+              this.startPing();
+            }
+          } else {
+            // Encrypted phase — binary frames
+            const arrayBuf: ArrayBuffer = e.data instanceof Blob
+              ? await (e.data as Blob).arrayBuffer()
+              : e.data as ArrayBuffer;
+            const frame = new Uint8Array(arrayBuf);
+
+            const decrypted = await this.decrypt(frame);
+            const text = new TextDecoder().decode(decrypted);
+            const msg = JSON.parse(text);
+
+            if (msg.channel === 'system' && msg.action === 'pong') {
+              this.missedPings = 0;
+              return;
+            }
+
+            this.onMessage(msg);
+          }
+        } catch (err) {
+          console.error('[DirectWs] Tunnel message handling error', err);
+        }
+      };
+
+      ws.onerror = () => {
+        console.warn('[DirectWs] Tunnel WebSocket error');
+      };
+
+      ws.onclose = () => {
+        if (this.handshakeTimer) {
+          clearTimeout(this.handshakeTimer);
+          this.handshakeTimer = null;
+        }
+        this.stopPing();
+        this.ws = null;
+        this.aesKey = null;
+        if (!this.disposed) {
+          this.fallbackToRelay();
+        }
+      };
+    } catch (err) {
+      console.error('[DirectWs] Tunnel connection setup error', err);
+      this.fallbackToRelay();
+    }
   }
 
   disconnect(): void {
@@ -255,7 +381,7 @@ export class DirectWsClient {
   private startPing(): void {
     this.missedPings = 0;
     this.pingTimer = setInterval(async () => {
-      if (this.state !== 'DIRECT') return;
+      if (this.state !== 'DIRECT' && this.state !== 'TUNNEL') return;
       this.missedPings++;
       if (this.missedPings > PING_MISS_LIMIT) {
         console.warn('[DirectWs] Too many missed pings, closing');

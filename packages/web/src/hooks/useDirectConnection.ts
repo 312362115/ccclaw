@@ -15,8 +15,8 @@ export function useDirectConnection(workspaceId: string | null) {
       onStateChange: (state) => {
         store.getState().setConnectionState(state);
 
-        // When DIRECT, set the directSend on chat store; clear it otherwise
-        if (state === 'DIRECT') {
+        // When DIRECT or TUNNEL, set the directSend on chat store; clear it otherwise
+        if (state === 'DIRECT' || state === 'TUNNEL') {
           useChatStore.getState().setDirectSend((msg: unknown) => {
             client.send(msg).catch((err: unknown) => {
               console.error('[DirectConnection] Failed to send chat message via direct channel', err);

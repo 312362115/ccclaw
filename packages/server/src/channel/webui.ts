@@ -3,6 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { verifyAccessToken } from '../auth/jwt.js';
 import { db, schema } from '../db/index.js';
 import { eq, and } from 'drizzle-orm';
+import { nanoid } from '@ccclaw/shared';
 import { logger } from '../logger.js';
 import { runnerManager } from '../core/runner-manager.js';
 import { messageBus } from '../bus/instance.js';
@@ -29,6 +30,9 @@ interface WsMessage {
 // terminalId → { workspaceSlug, client WebSocket }
 const terminalMap = new Map<string, { workspaceSlug: string; ws: WebSocket }>();
 
+// Tunnel: clientId → frontend WebSocket (for encrypted tunnel pipe)
+const tunnelClients = new Map<string, WebSocket>();
+
 export function createWebSocketHandler(server: import('node:http').Server) {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -43,6 +47,9 @@ export function createWebSocketHandler(server: import('node:http').Server) {
     } else if (url.pathname === '/ws/runner') {
       // Runner 连接：验证 token，注册到 RunnerManager
       handleRunnerUpgrade(req, socket, head);
+    } else if (url.pathname === '/ws/tunnel') {
+      // Tunnel 连接：加密隧道，Server 只做透传
+      handleTunnelUpgrade(req, socket, head);
     } else {
       socket.destroy();
     }
@@ -77,6 +84,12 @@ export function createWebSocketHandler(server: import('node:http').Server) {
             }
           }
         }
+      }, (msg: { clientId: string; data: string }) => {
+        // Forward tunnel frames from runner back to frontend client
+        const clientWs = tunnelClients.get(msg.clientId);
+        if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(Buffer.from(msg.data, 'base64'));
+        }
       });
 
       // Handle runner register message (ECDH public key + direct URL)
@@ -89,6 +102,63 @@ export function createWebSocketHandler(server: import('node:http').Server) {
         } catch {
           // Ignore parse errors — already handled by runnerManager
         }
+      });
+    });
+  }
+
+  // Tunnel WebSocket 升级处理：加密隧道，Server 只做二进制帧透传
+  function handleTunnelUpgrade(req: IncomingMessage, socket: any, head: Buffer) {
+    const tunnelWss = new WebSocketServer({ noServer: true });
+    tunnelWss.handleUpgrade(req, socket, head, async (ws) => {
+      const url = new URL(req.url || '/', `http://${req.headers.host}`);
+      const token = url.searchParams.get('token');
+      const workspaceId = url.searchParams.get('workspaceId');
+
+      if (!token || !workspaceId) {
+        ws.close(4001, 'Missing token or workspaceId');
+        return;
+      }
+
+      // Verify JWT
+      try {
+        await verifyAccessToken(token);
+      } catch {
+        ws.close(4001, 'Unauthorized');
+        return;
+      }
+
+      // Look up workspace to find runner binding
+      const [workspace] = await db.select().from(schema.workspaces)
+        .where(eq(schema.workspaces.id, workspaceId)).limit(1);
+      if (!workspace) {
+        ws.close(4004, 'Workspace not found');
+        return;
+      }
+
+      const clientId = `tunnel-${nanoid()}`;
+      tunnelClients.set(clientId, ws);
+
+      logger.info({ clientId, workspaceId, slug: workspace.slug }, 'Tunnel client connected');
+
+      // Forward all client messages to runner as tunnel_frame
+      ws.on('message', (raw: Buffer | string) => {
+        const data = Buffer.from(raw as ArrayLike<number>).toString('base64');
+        runnerManager.sendToRunner(workspace.slug, {
+          type: 'tunnel_frame',
+          clientId,
+          data,
+        });
+      });
+
+      ws.on('close', () => {
+        tunnelClients.delete(clientId);
+        // Notify runner to clean up tunnel client session
+        runnerManager.sendToRunner(workspace.slug, {
+          type: 'tunnel_frame',
+          clientId,
+          data: '', // empty data signals disconnect
+        });
+        logger.info({ clientId }, 'Tunnel client disconnected');
       });
     });
   }

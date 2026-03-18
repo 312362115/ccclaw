@@ -15,7 +15,7 @@ import {
 import { randomUUID } from 'node:crypto';
 
 interface ClientSession {
-  ws: WebSocket;
+  ws: WebSocket | null;  // null for tunnel clients
   sharedKey: Buffer;
   sendCounter: number;
   recvCounter: number;
@@ -37,12 +37,17 @@ export class DirectServer {
   private _httpServer: Server | undefined;
   private _wss: WebSocketServer | undefined;
   private readonly _clients = new Map<string, ClientSession>();
+  private _tunnelSend?: (clientId: string, data: string) => void;
 
   constructor(options: DirectServerOptions) {
     this._host = options.host ?? '127.0.0.1';
     this._keyPair = options.keyPair;
     this._verifyToken = options.verifyToken;
     this._onMessage = options.onMessage;
+  }
+
+  setTunnelSend(send: (clientId: string, data: string) => void): void {
+    this._tunnelSend = send;
   }
 
   get port(): number {
@@ -80,7 +85,7 @@ export class DirectServer {
 
   stop(): void {
     for (const [, session] of this._clients) {
-      session.ws.close();
+      session.ws?.close();
     }
     this._clients.clear();
     this._wss?.close();
@@ -89,18 +94,87 @@ export class DirectServer {
 
   sendToClient(clientId: string, msg: DirectMessage): void {
     const session = this._clients.get(clientId);
-    if (!session || session.ws.readyState !== WebSocket.OPEN) return;
+    if (!session) return;
 
     const plaintext = serializeDirectMessage(msg);
     const frame = encryptFrame(plaintext, session.sharedKey, session.sendCounter);
     session.sendCounter++;
-    session.ws.send(frame);
+
+    if (session.ws) {
+      // Direct WebSocket client
+      if (session.ws.readyState !== WebSocket.OPEN) return;
+      session.ws.send(frame);
+    } else if (this._tunnelSend) {
+      // Tunnel client — send via Server relay as base64
+      this._tunnelSend(clientId, Buffer.from(frame).toString('base64'));
+    }
   }
 
   broadcastToAll(msg: DirectMessage): void {
     for (const clientId of this._clients.keys()) {
       this.sendToClient(clientId, msg);
     }
+  }
+
+  /** Handle a tunnel frame forwarded from Server (base64-encoded). */
+  handleTunnelFrame(clientId: string, data: string): void {
+    // Empty data signals tunnel client disconnect
+    if (!data) {
+      this._clients.delete(clientId);
+      return;
+    }
+
+    const raw = Buffer.from(data, 'base64');
+    const session = this._clients.get(clientId);
+
+    if (!session) {
+      // No session yet — expect handshake (JSON text)
+      try {
+        const msg = JSON.parse(raw.toString('utf8'));
+        if (msg.type !== 'handshake' || !msg.clientPublicKey) {
+          return; // invalid handshake, ignore
+        }
+
+        const clientPub = publicKeyFromBase64(msg.clientPublicKey);
+        const connKp = generateECDHKeyPair();
+        const sharedKey = deriveSharedKey(connKp.privateKey, clientPub);
+
+        const newSession: ClientSession = {
+          ws: null, // tunnel client — no direct WS
+          sharedKey,
+          sendCounter: 0,
+          recvCounter: 0,
+        };
+        this._clients.set(clientId, newSession);
+
+        // Send handshake_ok back through tunnel
+        const reply = JSON.stringify({
+          type: 'handshake_ok',
+          runnerPublicKey: connKp.publicKeyBase64,
+        });
+        const replyBuf = Buffer.from(reply, 'utf8');
+        this._tunnelSend?.(clientId, replyBuf.toString('base64'));
+      } catch {
+        // invalid handshake data, ignore
+      }
+      return;
+    }
+
+    // Session exists — encrypted binary frame
+    try {
+      const plaintext = decryptFrame(raw, session.sharedKey, session.recvCounter);
+      session.recvCounter++;
+      const msg = parseDirectMessage(plaintext);
+      this._onMessage(clientId, msg);
+    } catch (err) {
+      // Decryption failed — remove tunnel client session
+      this._clients.delete(clientId);
+    }
+  }
+
+  /** Remove a tunnel client session (called when tunnel WS closes). */
+  removeTunnelClient(clientId: string): void {
+    this._clients.delete(clientId);
   }
 
   private _handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void {

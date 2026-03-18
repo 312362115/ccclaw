@@ -141,6 +141,12 @@ async function startDirectServer(): Promise<void> {
     });
 
     await directServer.start();
+
+    // Set up tunnel send callback — pipe encrypted frames back to Server
+    directServer.setTunnelSend((clientId: string, data: string) => {
+      sendToServer({ type: 'tunnel_frame', clientId, data });
+    });
+
     await fileWatcher.start();
 
     // Broadcast file events to all direct-connected clients
@@ -432,6 +438,11 @@ function handleServerMessage(msg: ServerMessage) {
   }
   if (msg.type === 'terminal_close') {
     terminalManager?.close(msg.terminalId);
+    return;
+  }
+
+  if (msg.type === 'tunnel_frame') {
+    directServer?.handleTunnelFrame(msg.clientId, msg.data);
     return;
   }
 }
