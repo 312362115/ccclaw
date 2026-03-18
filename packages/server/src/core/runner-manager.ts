@@ -31,13 +31,13 @@ export interface AgentRequest {
 }
 
 export interface AgentResponse {
-  type: 'text_delta' | 'tool_use' | 'tool_result' | 'confirm_request' | 'done' | 'error';
+  type: 'text_delta' | 'tool_use' | 'tool_result' | 'confirm_request' | 'done' | 'session_done' | 'error';
   [key: string]: unknown;
 }
 
 export type StartMode = 'docker' | 'local' | 'remote';
 
-export interface RuntimeConfig {
+export interface RunnerStartConfig {
   startMode: StartMode;
   runnerId: string;
   memory?: string;
@@ -393,7 +393,7 @@ export class RunnerManager {
     }
   }
 
-  private async getWorkspaceConfig(workspaceId: string): Promise<RuntimeConfig & { slug: string }> {
+  private async getWorkspaceConfig(workspaceId: string): Promise<RunnerStartConfig & { slug: string }> {
     const [ws] = await db.select().from(schema.workspaces)
       .where(eq(schema.workspaces.id, workspaceId)).limit(1);
     if (!ws) throw new Error('工作区不存在');

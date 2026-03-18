@@ -31,7 +31,9 @@ sessionsRouter.use('*', authMiddleware);
 
 // GET /api/workspaces/:id/sessions — 会话列表
 sessionsRouter.get('/:id/sessions', requireWorkspaceAccess(), async (c) => {
-  const slug = await getSlug(c.req.param('id'));
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: '缺少工作区 ID' }, 400);
+  const slug = await getSlug(id);
   if (!slug) return c.json({ error: '工作区不存在' }, 404);
 
   const wdb = openWorkspaceDb(slug);
@@ -49,7 +51,9 @@ sessionsRouter.get('/:id/sessions', requireWorkspaceAccess(), async (c) => {
 
 // GET /api/workspaces/:id/sessions/:sid/messages — 会话消息
 sessionsRouter.get('/:id/sessions/:sid/messages', requireWorkspaceAccess(), async (c) => {
-  const slug = await getSlug(c.req.param('id'));
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: '缺少工作区 ID' }, 400);
+  const slug = await getSlug(id);
   if (!slug) return c.json({ error: '工作区不存在' }, 404);
 
   const sid = c.req.param('sid');

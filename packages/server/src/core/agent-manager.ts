@@ -218,7 +218,10 @@ export class AgentManager {
         tokens: (m.tokens as number) ?? 0,
       }),
       onError: (m) => {
-        const errMsg = m.message || (m.error instanceof Error ? m.error.message : null) || (typeof m.error === 'string' ? m.error : null) || '未知错误';
+        const errMsg: string = (typeof m.message === 'string' ? m.message : null)
+          || (m.error instanceof Error ? m.error.message : null)
+          || (typeof m.error === 'string' ? m.error : null)
+          || '未知错误';
         logger.error({ agentError: errMsg }, 'Agent onError');
         messageBus.publishOutbound({
           type: 'error',
