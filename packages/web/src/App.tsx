@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastProvider } from './components/Toast';
 import { useEffect } from 'react';
 import { useAuthStore } from './stores/auth';
 import { Login } from './pages/Login';
@@ -26,6 +27,7 @@ export function App() {
   }, [fetchMe]);
 
   return (
+    <ToastProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -69,5 +71,6 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
+    </ToastProvider>
   );
 }
