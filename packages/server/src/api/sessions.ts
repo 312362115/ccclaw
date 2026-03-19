@@ -77,5 +77,26 @@ sessionsRouter.post('/:id/sessions', requireWorkspaceAccess(), async (c) => {
 
 // DELETE /api/workspaces/:id/sessions/:sid
 sessionsRouter.delete('/:id/sessions/:sid', requireWorkspaceAccess(), async (c) => {
-  return c.json({ error: '暂未实现' }, 501);
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: '缺少工作区 ID' }, 400);
+  const slug = await getSlug(id);
+  if (!slug) return c.json({ error: '工作区不存在' }, 404);
+
+  const sid = c.req.param('sid');
+  const dbPath = join(config.DATA_DIR, 'workspaces', slug, 'internal', 'workspace.db');
+  let wdb: Database.Database;
+  try {
+    wdb = new Database(dbPath);
+  } catch {
+    return c.json({ error: '工作区数据库不可用' }, 500);
+  }
+
+  try {
+    wdb.pragma('foreign_keys = ON');
+    const result = wdb.prepare('DELETE FROM sessions WHERE id = ?').run(sid);
+    if (result.changes === 0) return c.json({ error: '会话不存在' }, 404);
+    return c.body(null, 204);
+  } finally {
+    wdb.close();
+  }
 });
