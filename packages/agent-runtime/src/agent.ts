@@ -23,7 +23,9 @@ import type {
   LLMToolCall,
   LLMMessage,
   StopReason,
+  ContentBlock,
 } from './llm/types.js';
+import { getTextContent } from './llm/types.js';
 import { classifyIntent } from './intent.js';
 import { toCLIFormat, parseToolCallsFromText } from './tool-format.js';
 
@@ -60,7 +62,7 @@ export async function runAgent(
   }
 
   const { db, assembler, toolRegistry, consolidator, provider, mcpManager, maxIterations } = deps;
-  const { sessionId, message } = request.params;
+  const { sessionId, message, content: multimodalContent } = request.params;
   const iterLimit = maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
   try {
@@ -82,7 +84,7 @@ export async function runAgent(
       db.createSessionWithId(sessionId, { workspace_id: 'default', user_id: 'default', title: '新会话' });
     }
 
-    // 1. 追加用户消息
+    // 1. 追加用户消息（DB 存纯文本，多模态内容只在本次 LLM 调用中使用）
     db.appendMessage({ session_id: sessionId, role: 'user', content: message });
 
     // 2. 上下文整合（在组装前压缩，对齐 Claude Code 的处理方式）
@@ -109,10 +111,20 @@ export async function runAgent(
 
     // 6. Agent 迭代循环
     let iteration = 0;
-    const history: LLMMessage[] = ctx.messages.map((m) => ({
-      role: m.role as 'user' | 'assistant' | 'tool',
-      content: m.content,
-    }));
+    const history: LLMMessage[] = ctx.messages.map((m, i, arr) => {
+      // 对最后一条 user 消息注入多模态内容（如果有）
+      if (multimodalContent && i === arr.length - 1 && m.role === 'user') {
+        const blocks: ContentBlock[] = [
+          { type: 'text', text: m.content },
+          ...multimodalContent,
+        ];
+        return { role: m.role as 'user', content: blocks } as LLMMessage;
+      }
+      return {
+        role: m.role as 'user' | 'assistant' | 'tool',
+        content: m.content,
+      };
+    });
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;

@@ -103,7 +103,7 @@ export class ContextAssembler {
       const stripped = stripImageContent(
         messages.map((m) => ({ role: m.role as 'user' | 'assistant' | 'tool', content: m.content })),
       );
-      messages = messages.map((m, i) => ({ ...m, content: stripped[i].content }));
+      messages = messages.map((m, i) => ({ ...m, content: stripped[i].content as string }));
     }
 
     return {

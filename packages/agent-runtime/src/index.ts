@@ -29,6 +29,7 @@ import { createMemoryTools } from './tools/memory.js';
 import { createTodoTools } from './tools/todo.js';
 import { createSpawnTool } from './tools/spawn.js';
 import { SubagentManager } from './subagent-manager.js';
+import { HookRunner } from './hook-runner.js';
 import { logger } from './logger.js';
 
 // ====== 环境变量 ======
@@ -91,6 +92,10 @@ function initModules(): void {
 
     // Consolidator（LLM callback 由 per-request provider 提供，初始为 null）
     const consolidator = new Consolidator(db, null);
+
+    // HookRunner（工具执行前后触发用户脚本）
+    const hookRunner = new HookRunner(WORKSPACE_DIR);
+    toolRegistry.setHookRunner(hookRunner);
 
     // MCP Manager（从环境变量或配置中获取 MCP servers，当前为空）
     const mcpManager = new MCPManager({}, toolRegistry);

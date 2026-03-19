@@ -18,7 +18,7 @@ import type {
   ProviderConfig,
   StopReason,
 } from './types.js';
-import { ProviderConfigError } from './types.js';
+import { ProviderConfigError, getTextContent } from './types.js';
 
 // ============================================================
 // Anthropic API types
@@ -47,11 +47,24 @@ interface AnthropicToolResultBlock {
   content: string;
 }
 
+interface AnthropicImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: string;
+    data: string;
+  } | {
+    type: 'url';
+    url: string;
+  };
+}
+
 type AnthropicContentBlock =
   | AnthropicTextBlock
   | AnthropicThinkingBlock
   | AnthropicToolUseBlock
-  | AnthropicToolResultBlock;
+  | AnthropicToolResultBlock
+  | AnthropicImageBlock;
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -207,8 +220,9 @@ function convertMessages(messages: LLMMessage[]): AnthropicMessage[] {
         result.push({ role: 'assistant', content: blocks });
       } else {
         const blocks: AnthropicContentBlock[] = [];
-        if (msg.content) {
-          blocks.push({ type: 'text', text: msg.content });
+        const text = getTextContent(msg.content);
+        if (text) {
+          blocks.push({ type: 'text', text });
         }
         for (const tc of msg.toolCalls ?? []) {
           blocks.push({
@@ -224,11 +238,20 @@ function convertMessages(messages: LLMMessage[]): AnthropicMessage[] {
         });
       }
     } else {
-      // user role
-      result.push({
-        role: 'user',
-        content: [{ type: 'text', text: msg.content }],
-      });
+      // user role — 支持纯文本或多模态内容块
+      if (Array.isArray(msg.content)) {
+        const blocks: AnthropicContentBlock[] = msg.content.map((block) => {
+          if (block.type === 'text') return { type: 'text' as const, text: block.text };
+          if (block.type === 'image') return { type: 'image' as const, source: block.source } as AnthropicImageBlock;
+          return { type: 'text' as const, text: '' };
+        });
+        result.push({ role: 'user', content: blocks });
+      } else {
+        result.push({
+          role: 'user',
+          content: [{ type: 'text', text: msg.content }],
+        });
+      }
     }
   }
 

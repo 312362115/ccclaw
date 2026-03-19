@@ -18,7 +18,7 @@ import type {
   LLMStreamEvent,
   TokenUsage,
 } from './types.js';
-import { ProviderConfigError } from './types.js';
+import { ProviderConfigError, getTextContent } from './types.js';
 import { withRetry, sanitizeMessages } from './base.js';
 
 // ============================================================
@@ -103,7 +103,7 @@ function toOpenAIMessages(messages: LLMMessage[]): OpenAIMessage[] {
         // Fallback: bare tool message without structured toolResults
         result.push({
           role: 'tool',
-          content: msg.content ?? '',
+          content: getTextContent(msg.content) ?? '',
         });
       }
       continue;
@@ -133,11 +133,28 @@ function toOpenAIMessages(messages: LLMMessage[]): OpenAIMessage[] {
       continue;
     }
 
-    // user / system
-    result.push({
-      role: msg.role as 'user' | 'system',
-      content: msg.content ?? '',
-    });
+    // user / system — 支持多模态内容块
+    if (Array.isArray(msg.content)) {
+      const parts = msg.content.map((block) => {
+        if (block.type === 'text') return { type: 'text' as const, text: block.text };
+        if (block.type === 'image') {
+          if (block.source.type === 'base64') {
+            return {
+              type: 'image_url' as const,
+              image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` },
+            };
+          }
+          return { type: 'image_url' as const, image_url: { url: block.source.url } };
+        }
+        return { type: 'text' as const, text: '' };
+      });
+      result.push({ role: msg.role as 'user', content: parts } as any);
+    } else {
+      result.push({
+        role: msg.role as 'user' | 'system',
+        content: msg.content ?? '',
+      });
+    }
   }
 
   return result;

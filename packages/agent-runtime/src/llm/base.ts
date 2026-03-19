@@ -6,6 +6,7 @@
  */
 
 import type { LLMMessage } from './types.js';
+import { getTextContent } from './types.js';
 
 // ====== Constants ======
 
@@ -95,7 +96,8 @@ export function sanitizeMessages(messages: LLMMessage[]): LLMMessage[] {
       return msg;
     }
 
-    const isEmpty = !msg.content || msg.content.trim() === '';
+    const textContent = getTextContent(msg.content);
+    const isEmpty = !textContent || textContent.trim() === '';
 
     if (!isEmpty) {
       return msg;
@@ -117,13 +119,21 @@ export function sanitizeMessages(messages: LLMMessage[]): LLMMessage[] {
 const BASE64_IMAGE_RE = /data:image\/[a-zA-Z+.-]+;base64,[A-Za-z0-9+/]+=*/g;
 
 /**
- * Replaces base64 image data URIs with a placeholder string.
- * Used to strip visual content when calling non-vision models.
+ * Strips image content from messages.
+ * Handles both string content (base64 data URIs) and ContentBlock[] (image blocks).
+ * Used when calling non-vision models.
  */
 export function stripImageContent(messages: LLMMessage[]): LLMMessage[] {
   return messages.map((msg) => {
+    // ContentBlock[] format: filter out image blocks
+    if (Array.isArray(msg.content)) {
+      const textOnly = msg.content.filter((b) => b.type === 'text');
+      if (textOnly.length === msg.content.length) return msg; // no images
+      return { ...msg, content: textOnly.length > 0 ? textOnly : [{ type: 'text' as const, text: '[images removed]' }] };
+    }
+
+    // String format: strip base64 data URIs
     if (!msg.content || !BASE64_IMAGE_RE.test(msg.content)) {
-      // Reset lastIndex after test() (stateful regex)
       BASE64_IMAGE_RE.lastIndex = 0;
       return msg;
     }

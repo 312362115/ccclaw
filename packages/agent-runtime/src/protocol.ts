@@ -1,6 +1,6 @@
 // Agent 请求/响应协议 — 与 Server 端 runner-manager.ts 共享类型定义
 
-import type { LLMStreamEvent, AgentStreamEvent, TokenUsage } from './llm/types.js';
+import type { LLMStreamEvent, AgentStreamEvent, TokenUsage, ContentBlock } from './llm/types.js';
 
 // 启动时注入的配置（不随每次请求发送）
 export interface RuntimeConfig {
@@ -12,12 +12,14 @@ export interface RuntimeConfig {
   skills?: string[];
 }
 
-// 聊天请求 — 只传消息本身
+// 聊天请求 — 支持纯文本或多模态内容
 export interface AgentRequest {
   method: 'run';
   params: {
     sessionId: string;
     message: string;
+    /** 多模态内容块（图片等），与 message 互补。传了 content 时 message 可为空字符串 */
+    content?: ContentBlock[];
   };
 }
 

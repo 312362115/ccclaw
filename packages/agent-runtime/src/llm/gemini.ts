@@ -17,7 +17,7 @@ import type {
   StopReason,
   LLMToolCall,
 } from './types.js';
-import { ProviderConfigError } from './types.js';
+import { ProviderConfigError, getTextContent } from './types.js';
 import { withRetry, sanitizeMessages } from './base.js';
 
 // ====== Gemini API Types ======
@@ -106,9 +106,9 @@ function buildGeminiContents(messages: LLMMessage[]): {
 
   for (const msg of sanitized) {
     if (msg.role === 'system' as string) {
-      // System messages become systemInstruction
-      if (msg.content) {
-        systemInstruction = { parts: [{ text: msg.content }] };
+      const text = getTextContent(msg.content);
+      if (text) {
+        systemInstruction = { parts: [{ text }] };
       }
       continue;
     }
@@ -132,13 +132,14 @@ function buildGeminiContents(messages: LLMMessage[]): {
             },
           });
         }
-      } else if (msg.content) {
+      } else if (getTextContent(msg.content)) {
         // Fallback: treat content as a single function response
+        const textContent = getTextContent(msg.content);
         let responseData: Record<string, unknown>;
         try {
-          responseData = JSON.parse(msg.content) as Record<string, unknown>;
+          responseData = JSON.parse(textContent) as Record<string, unknown>;
         } catch {
-          responseData = { result: msg.content };
+          responseData = { result: textContent };
         }
         parts.push({
           functionResponse: {
@@ -157,8 +158,9 @@ function buildGeminiContents(messages: LLMMessage[]): {
       const parts: GeminiPart[] = [];
 
       // Add text content if present
-      if (msg.content) {
-        parts.push({ text: msg.content });
+      const assistantText = getTextContent(msg.content);
+      if (assistantText) {
+        parts.push({ text: assistantText });
       }
 
       // Add tool calls as functionCall parts
@@ -179,8 +181,17 @@ function buildGeminiContents(messages: LLMMessage[]): {
       continue;
     }
 
-    // user role
-    if (msg.content) {
+    // user role — 支持多模态内容块
+    if (Array.isArray(msg.content)) {
+      const parts: any[] = msg.content.map((block) => {
+        if (block.type === 'text') return { text: block.text };
+        if (block.type === 'image' && block.source.type === 'base64') {
+          return { inlineData: { mimeType: block.source.media_type, data: block.source.data } };
+        }
+        return { text: '' };
+      });
+      contents.push({ role: 'user', parts });
+    } else if (msg.content) {
       contents.push({ role: 'user', parts: [{ text: msg.content }] });
     }
   }
