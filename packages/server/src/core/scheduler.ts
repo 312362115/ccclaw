@@ -1,5 +1,6 @@
 // 定时任务调度器 — node-cron + p-queue
 import cron from 'node-cron';
+import { CronExpressionParser } from 'cron-parser';
 import PQueue from 'p-queue';
 import { db, schema } from '../db/index.js';
 import { eq, and, lte } from 'drizzle-orm';
@@ -113,11 +114,11 @@ async function executeTask(task: any) {
  */
 async function updateNextRunAt(task: any) {
   try {
-    const interval = cron.validate(task.cron) ? getNextCronDate(task.cron) : null;
+    const nextRun = getNextCronDate(task.cron);
     await db.update(schema.scheduledTasks)
       .set({
         lastRunAt: new Date(),
-        nextRunAt: interval,
+        nextRunAt: nextRun,
       } as any)
       .where(eq(schema.scheduledTasks.id, task.id));
   } catch (err) {
@@ -126,14 +127,16 @@ async function updateNextRunAt(task: any) {
 }
 
 /**
- * 简单的 cron 下次执行时间计算
+ * 根据 cron 表达式计算下次执行时间
  */
-function getNextCronDate(cronExpr: string): Date {
-  // 使用 node-cron 的内部机制获取下次执行时间
-  // 简化实现：下一分钟
-  const next = new Date();
-  next.setMinutes(next.getMinutes() + 1);
-  next.setSeconds(0);
-  next.setMilliseconds(0);
-  return next;
+export function getNextCronDate(cronExpr: string, now?: Date): Date | null {
+  try {
+    const interval = CronExpressionParser.parse(cronExpr, {
+      currentDate: now ?? new Date(),
+      tz: 'UTC',
+    });
+    return interval.next().toDate();
+  } catch {
+    return null;
+  }
 }

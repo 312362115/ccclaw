@@ -5,6 +5,7 @@ import { createTaskSchema, updateTaskSchema } from '@ccclaw/shared';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireWorkspaceAccess } from '../auth/rbac.js';
 import type { AppEnv } from '../types.js';
+import { CronExpressionParser } from 'cron-parser';
 
 export const tasksRouter = new Hono<AppEnv>();
 
@@ -23,6 +24,12 @@ tasksRouter.post('/:id/tasks', requireWorkspaceAccess(), async (c) => {
   const workspaceId = c.req.param('id')!;
   const body = createTaskSchema.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: '参数错误', details: body.error.flatten() }, 400);
+
+  try {
+    CronExpressionParser.parse(body.data.cron);
+  } catch {
+    return c.json({ error: 'Cron 表达式无效' }, 400);
+  }
 
   const [row] = await db.insert(schema.scheduledTasks).values({
     workspaceId,
