@@ -4,9 +4,9 @@
  * 流程：
  * 1. Intent 分类（stop / correction / continue）
  * 2. 追加用户消息到 workspace.db
- * 3. 组装上下文（ContextAssembler）
- * 4. 迭代调用 LLMProvider.stream() + 执行工具
- * 5. 整合检查（Consolidator）
+ * 3. 上下文整合（Consolidator，在组装前压缩旧消息）
+ * 4. 组装上下文（ContextAssembler）
+ * 5. 迭代调用 LLMProvider.stream() + 执行工具
  */
 
 import type { AgentRequest } from './protocol.js';
@@ -85,7 +85,15 @@ export async function runAgent(
     // 1. 追加用户消息
     db.appendMessage({ session_id: sessionId, role: 'user', content: message });
 
-    // 2. 组装上下文（systemPrompt 等已通过 config 注入到 assembler）
+    // 2. 上下文整合（在组装前压缩，对齐 Claude Code 的处理方式）
+    toolRegistry.enterRestrictedMode(['memory_write', 'memory_read', 'memory_search']);
+    try {
+      await consolidator.consolidateIfNeeded(sessionId);
+    } finally {
+      toolRegistry.exitRestrictedMode();
+    }
+
+    // 3. 组装上下文（systemPrompt 等已通过 config 注入到 assembler）
     const serverContext: ServerContext = {
       workspaceId: '',
       workspaceName: '',
@@ -93,13 +101,13 @@ export async function runAgent(
     };
     const ctx = assembler.assemble({ sessionId, serverContext });
 
-    // 3. 获取 provider 能力
+    // 4. 获取 provider 能力
     const caps: ProviderCapabilities = provider.capabilities();
 
-    // 4. 转换工具定义
+    // 5. 转换工具定义
     const toolDefs = ctx.tools;
 
-    // 5. Agent 迭代循环
+    // 6. Agent 迭代循环
     let iteration = 0;
     const history: LLMMessage[] = ctx.messages.map((m) => ({
       role: m.role as 'user' | 'assistant' | 'tool',
@@ -261,15 +269,6 @@ export async function runAgent(
         }
         break;
       }
-    }
-
-    // 6. 整合检查（受限模式）
-    toolRegistry.enterRestrictedMode(['memory_write', 'memory_read', 'memory_search']);
-    try {
-      onStream({ type: 'consolidation', summary: 'Checking context...' });
-      await consolidator.consolidateIfNeeded(sessionId);
-    } finally {
-      toolRegistry.exitRestrictedMode();
     }
 
     onStream({

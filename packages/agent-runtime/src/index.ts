@@ -24,9 +24,11 @@ import { MCPManager } from './mcp-manager.js';
 import { TerminalManager } from './terminal-manager.js';
 
 // 内置工具
-import { bashTool, fileTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
+import { bashTool, readTool, writeTool, editTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
 import { createMemoryTools } from './tools/memory.js';
 import { createTodoTools } from './tools/todo.js';
+import { createSpawnTool } from './tools/spawn.js';
+import { SubagentManager } from './subagent-manager.js';
 import { logger } from './logger.js';
 
 // ====== 环境变量 ======
@@ -66,7 +68,9 @@ function initModules(): void {
 
     // 注册内置工具
     toolRegistry.register(bashTool);
-    toolRegistry.register(fileTool);
+    toolRegistry.register(readTool);
+    toolRegistry.register(writeTool);
+    toolRegistry.register(editTool);
     toolRegistry.register(gitTool);
     toolRegistry.register(globTool);
     toolRegistry.register(grepTool);
@@ -215,6 +219,15 @@ function handleDirectMessage(
       const deps: AgentDeps | undefined = sharedDeps
         ? { ...sharedDeps, provider: cachedProvider }
         : undefined;
+
+      // 注册 spawn 工具
+      if (deps && cachedProvider) {
+        const subagentManager = new SubagentManager(deps.db, cachedProvider, deps.toolRegistry);
+        const spawnTool = createSpawnTool(subagentManager, d.sessionId);
+        if (!deps.toolRegistry.getTool('spawn')) {
+          deps.toolRegistry.register(spawnTool);
+        }
+      }
 
       const onStream = (event: AgentResponse) => {
         directServer?.sendToClient(clientId, {
@@ -367,7 +380,14 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
       apiBase: cfg.apiBase,
       defaultModel: cfg.model,
     });
-    logger.info({ type: cfg.providerType, model: cfg.model || 'default' }, 'Provider 已缓存');
+    // 同步 Provider 的上下文窗口到 Consolidator
+    if (sharedDeps?.consolidator) {
+      const contextWindow = cachedProvider.capabilities().contextWindow;
+      sharedDeps.consolidator.setContextWindow(contextWindow);
+      logger.info({ type: cfg.providerType, model: cfg.model || 'default', contextWindow }, 'Provider 已缓存');
+    } else {
+      logger.info({ type: cfg.providerType, model: cfg.model || 'default' }, 'Provider 已缓存');
+    }
   } catch (err) {
     logger.error({ err }, 'Provider 创建失败');
     cachedProvider = null;
@@ -467,6 +487,16 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
   const deps: AgentDeps | undefined = sharedDeps
     ? { ...sharedDeps, provider: cachedProvider }
     : undefined;
+
+  // 注册 spawn 工具（per-request，需要 provider 和 sessionId）
+  if (deps && cachedProvider) {
+    const sessionId = request.params.sessionId;
+    const subagentManager = new SubagentManager(deps.db, cachedProvider, deps.toolRegistry);
+    const spawnTool = createSpawnTool(subagentManager, sessionId);
+    if (!deps.toolRegistry.getTool('spawn')) {
+      deps.toolRegistry.register(spawnTool);
+    }
+  }
 
   await runAgent(request, onStream, deps);
 }

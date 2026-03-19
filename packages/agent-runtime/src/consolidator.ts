@@ -1,13 +1,13 @@
 /**
  * Consolidator — 滑动窗口上下文整合
  *
- * 1. 滑动窗口：未压缩消息 token > contextWindow * 0.3 时，
+ * 1. 滑动窗口：未压缩消息 token > contextWindow * 0.7 时，
  *    压缩 1 个 user turn group（user + 后续 assistant/tool 消息）
- * 2. 硬截断：总 token > contextWindow * 0.8 时，跳过 LLM，直接截断到 log memory
+ * 2. 硬截断：总 token > contextWindow * 0.9 时，跳过 LLM，直接截断到 log memory
  * 3. Log 记忆合并：log 记忆 > 15 条 OR > 4000 tokens 时，LLM 合并为 1-2 条
  *
- * 记忆压缩：当 decision + feedback 总 token 超过阈值时，
- * 调用 LLM 合并压缩。
+ * contextWindowTokens 应从 Provider capabilities 中获取，自动适配不同模型。
+ * 记忆压缩：当 decision + feedback 总 token 超过阈值时，调用 LLM 合并压缩。
  */
 
 import type { WorkspaceDB, Message } from './workspace-db.js';
@@ -32,8 +32,8 @@ export interface ConsolidatorOptions {
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const DEFAULT_MEMORY_COMPRESS_THRESHOLD = 4_000;
-const SLIDING_TRIGGER_RATIO = 0.3;
-const HARD_TRUNCATE_RATIO = 0.8;
+const SLIDING_TRIGGER_RATIO = 0.7;
+const HARD_TRUNCATE_RATIO = 0.9;
 const LOG_MERGE_COUNT = 15;
 const LOG_MERGE_TOKENS = 4000;
 
@@ -50,6 +50,16 @@ export class Consolidator {
   ) {
     this.contextWindowTokens = options?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW;
     this.memoryCompressThreshold = options?.memoryCompressThreshold ?? DEFAULT_MEMORY_COMPRESS_THRESHOLD;
+  }
+
+  /** 更新上下文窗口大小（Provider 变更时调用） */
+  setContextWindow(tokens: number): void {
+    this.contextWindowTokens = tokens;
+  }
+
+  /** 获取当前上下文窗口大小 */
+  getContextWindow(): number {
+    return this.contextWindowTokens;
   }
 
   /** 检查并按需整合 session 消息 */
@@ -211,8 +221,8 @@ export class Consolidator {
     sessionId: string,
     lastConsolidated: number,
   ): Promise<boolean> {
-    // 截断到保留 30% 窗口的消息
-    const targetRemain = this.contextWindowTokens * SLIDING_TRIGGER_RATIO;
+    // 截断到保留 50% 窗口的消息（在滑动窗口阈值之下留缓冲）
+    const targetRemain = this.contextWindowTokens * 0.5;
     const estimated = estimateMessagesTokens(
       messages.map((m) => ({ role: m.role, content: m.content })),
     );

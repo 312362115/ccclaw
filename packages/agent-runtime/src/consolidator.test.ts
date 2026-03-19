@@ -128,13 +128,15 @@ describe('Consolidator.consolidateIfNeeded', () => {
       };
     };
 
-    // contextWindow=200 → sliding threshold = 60 tokens
+    // 6 messages × (15 content + 4 overhead) = 114 tokens
+    // contextWindow=160 → sliding = 112 (160*0.7), hard = 144 (160*0.9)
+    // 114 > 112 triggers sliding window, 114 < 144 does NOT trigger hard truncation
     const consolidator = new Consolidator(db, trackingLLM, {
-      contextWindowTokens: 200,
+      contextWindowTokens: 160,
     });
 
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
-    // Add 3 turn groups to exceed 30% threshold
+    // Add 3 turn groups to exceed 70% threshold
     for (let i = 0; i < 6; i++) {
       db.appendMessage({
         session_id: session.id,
@@ -166,13 +168,13 @@ describe('Consolidator.consolidateIfNeeded', () => {
       };
     };
 
-    // contextWindow=100 → hard threshold = 80 tokens
+    // contextWindow=100 → hard threshold = 90 tokens (100 * 0.9)
     const consolidator = new Consolidator(db, trackingLLM, {
       contextWindowTokens: 100,
     });
 
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
-    // Add enough messages to exceed 80% of 100 tokens
+    // Add enough messages to exceed 90% of 100 tokens
     for (let i = 0; i < 10; i++) {
       db.appendMessage({
         session_id: session.id,
@@ -194,7 +196,7 @@ describe('Consolidator.consolidateIfNeeded', () => {
   });
 
   it('无 LLM 时降级归档', async () => {
-    // contextWindow=100 → sliding threshold = 30 tokens
+    // contextWindow=100 → sliding threshold = 70 tokens (100 * 0.7)
     const consolidator = new Consolidator(db, null, { contextWindowTokens: 100 });
 
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
