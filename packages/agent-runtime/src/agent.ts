@@ -47,6 +47,25 @@ export interface AgentDeps {
 
 const DEFAULT_MAX_ITERATIONS = 50;
 
+const PLAN_MODE_SUFFIX = `
+
+## 当前处于计划模式
+
+你现在处于 **计划模式**。请：
+1. 分析用户的需求，理解目标
+2. 列出实现步骤（编号列表），每步包含：要改什么文件、做什么改动、为什么
+3. 标注步骤间的依赖关系
+4. 评估风险和边界情况
+
+**不要执行任何工具调用**，只输出计划文本。用户确认后再执行。
+输出格式：先一句话概述方案，然后列出分步计划。`;
+
+const PLAN_EXECUTE_SUFFIX = `
+
+## 执行计划
+
+用户已确认上面的计划。请按照之前制定的计划，逐步执行。每完成一步，简要说明完成情况再继续下一步。`;
+
 // ====== Agent Loop ======
 
 export async function runAgent(
@@ -67,12 +86,21 @@ export async function runAgent(
 
   try {
     // 0. Intent 分类
-    const intent = classifyIntent(message);
+    const intent = classifyIntent(message, sessionId);
     if (intent === 'stop') {
       onStream({ type: 'session_done', usage: { inputTokens: 0, outputTokens: 0 } });
       return;
     }
     // correction: 标记上一轮无效，然后继续（后续可扩展）
+    const isPlanMode = intent === 'plan';
+    const isPlanExecute = intent === 'plan_execute';
+
+    // 通知前端 plan 模式状态
+    if (isPlanMode) {
+      onStream({ type: 'plan_mode', active: true });
+    } else if (isPlanExecute) {
+      onStream({ type: 'plan_mode', active: false });
+    }
 
     // 确保 MCP Server 已连接
     if (mcpManager) {
@@ -106,8 +134,16 @@ export async function runAgent(
     // 4. 获取 provider 能力
     const caps: ProviderCapabilities = provider.capabilities();
 
-    // 5. 转换工具定义
-    const toolDefs = ctx.tools;
+    // 5. 转换工具定义（plan 模式下不传工具，只生成计划）
+    const toolDefs = isPlanMode ? [] : ctx.tools;
+
+    // Plan 模式：修改 system prompt，引导 Agent 只输出计划
+    if (isPlanMode) {
+      ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_MODE_SUFFIX;
+    }
+    if (isPlanExecute) {
+      ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_EXECUTE_SUFFIX;
+    }
 
     // 6. Agent 迭代循环
     let iteration = 0;
@@ -129,7 +165,10 @@ export async function runAgent(
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
-    while (iteration < iterLimit) {
+    // Plan 模式只需 1 轮 LLM 调用
+    const effectiveIterLimit = isPlanMode ? 1 : iterLimit;
+
+    while (iteration < effectiveIterLimit) {
       iteration++;
 
       // 构建 ChatParams

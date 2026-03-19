@@ -165,6 +165,7 @@ export type AgentStreamEvent =
   | { type: 'subagent_started'; subagentId: string; goal: string }
   | { type: 'subagent_result'; subagentId: string; result: string }
   | { type: 'consolidation'; summary: string }
+  | { type: 'plan_mode'; active: boolean }
   | { type: 'session_done'; usage: TokenUsage };
 
 // ============================================================
