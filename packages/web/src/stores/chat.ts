@@ -118,7 +118,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const newMap = new Map(get().messages);
       newMap.set(sessionId, msgs);
       set({ messages: newMap });
-    } catch { /* 静默失败，新会话没有历史 */ }
+    } catch (e) {
+      // 404 is expected for new sessions without history
+      if (e instanceof Error && 'status' in e && (e as any).status === 404) return;
+      console.warn('加载历史消息失败:', e);
+    }
   },
 
   send: (workspaceId, sessionId, content) => {

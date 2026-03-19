@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../../api/client';
 import { ContentPageShell } from '../../components/ContentPageShell';
+import { useToast } from '../../components/Toast';
 
 interface ScheduledTask {
   id: string;
@@ -22,6 +23,7 @@ interface Workspace {
 const EMPTY_FORM = { name: '', cron: '', prompt: '', enabled: true };
 
 export function Tasks() {
+  const { toast } = useToast();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWs, setSelectedWs] = useState<string | null>(null);
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
@@ -37,7 +39,7 @@ export function Tasks() {
     api<Workspace[]>('/workspaces').then((list) => {
       setWorkspaces(list);
       if (list.length > 0) setSelectedWs(list[0].id);
-    }).catch(() => {});
+    }).catch((e: any) => toast(e?.message || '加载工作区失败'));
   }, []);
 
   // 加载任务列表
@@ -45,7 +47,7 @@ export function Tasks() {
     setLoading(true);
     api<ScheduledTask[]>(`/workspaces/${wsId}/tasks`)
       .then(setTasks)
-      .catch(() => setTasks([]))
+      .catch((e: any) => { setTasks([]); toast(e?.message || '加载任务失败'); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -83,8 +85,8 @@ export function Tasks() {
       }
       setEditing(null);
       loadTasks(selectedWs);
-    } catch {
-      // 静默处理
+    } catch (e: any) {
+      toast(e?.message || '保存任务失败');
     } finally {
       setSaving(false);
     }
@@ -93,7 +95,7 @@ export function Tasks() {
   // 删除
   const handleDelete = async (taskId: string) => {
     if (!selectedWs) return;
-    await api(`/workspaces/${selectedWs}/tasks/${taskId}`, { method: 'DELETE' }).catch(() => {});
+    await api(`/workspaces/${selectedWs}/tasks/${taskId}`, { method: 'DELETE' }).catch((e: any) => toast(e?.message || '删除任务失败'));
     loadTasks(selectedWs);
   };
 
@@ -103,7 +105,7 @@ export function Tasks() {
     await api(`/workspaces/${selectedWs}/tasks/${task.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ enabled: !task.enabled }),
-    }).catch(() => {});
+    }).catch((e: any) => toast(e?.message || '切换状态失败'));
     loadTasks(selectedWs);
   };
 
