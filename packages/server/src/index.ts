@@ -3,7 +3,8 @@ import { createServer } from 'node:http';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { api } from './api/index.js';
-import { securityHeaders, corsMiddleware } from './middleware/security.js';
+import { securityHeadersMiddleware, corsMiddleware } from './middleware/security.js';
+import { requestLogger } from './middleware/request-logger.js';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { createWebSocketHandler } from './channel/webui.js';
 import { createFeishuChannel } from './channel/feishu.js';
@@ -11,18 +12,40 @@ import { runnerManager } from './core/runner-manager.js';
 import { startScheduler } from './core/scheduler.js';
 import { agentManager } from './core/agent-manager.js';
 import { startHeartbeat } from './core/heartbeat.js';
+import { startBackupSchedule } from './core/backup-schedule.js';
+import { db, schema } from './db/index.js';
 
 const app = new Hono();
 
 // 全局中间件
-app.use('*', securityHeaders);
+app.use('*', securityHeadersMiddleware);
 app.use('*', corsMiddleware);
+app.use('*', requestLogger);
 
 // API 路由
 app.route('/api', api);
 
-// 健康检查
-app.get('/health', (c) => c.json({ status: 'ok' }));
+// 健康检查（含依赖状态）
+app.get('/health', async (c) => {
+  const checks: Record<string, unknown> = {
+    status: 'ok' as 'ok' | 'degraded',
+    uptime: Math.round(process.uptime()),
+    memoryMB: Math.round(process.memoryUsage().rss / 1024 / 1024),
+    db: false,
+    runners: 0,
+  };
+
+  try {
+    await db.select({ id: schema.users.id }).from(schema.users).limit(1);
+    checks.db = true;
+  } catch {
+    checks.status = 'degraded';
+  }
+
+  checks.runners = runnerManager.getOnlineCount();
+
+  return c.json(checks);
+});
 
 // Feishu 渠道（webhook 路由）
 const feishuChannel = createFeishuChannel();
@@ -81,6 +104,9 @@ startScheduler();
 
 // 启动 Heartbeat 自主唤醒
 startHeartbeat({ enabled: !!process.env.HEARTBEAT_ENABLED });
+
+// 启动自动备份（每日凌晨 2 点）+ token_usage 数据清理
+startBackupSchedule();
 
 server.listen(config.PORT, () => {
   logger.info({ port: config.PORT }, 'CCCLaw server started');

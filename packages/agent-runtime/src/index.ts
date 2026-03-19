@@ -27,6 +27,7 @@ import { TerminalManager } from './terminal-manager.js';
 import { bashTool, fileTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
 import { createMemoryTools } from './tools/memory.js';
 import { createTodoTools } from './tools/todo.js';
+import { logger } from './logger.js';
 
 // ====== 环境变量 ======
 
@@ -39,7 +40,7 @@ const WORKSPACE_DB = process.env.WORKSPACE_DB || join(INTERNAL_DIR, 'workspace.d
 const ALLOWED_PATHS = (process.env.ALLOWED_PATHS || WORKSPACE_DIR).split(':').map(p => resolve(p));
 
 if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
-  console.error('缺少必需环境变量: RUNNER_ID, SERVER_URL, AUTH_TOKEN');
+  logger.fatal('缺少必需环境变量: RUNNER_ID, SERVER_URL, AUTH_TOKEN');
   process.exit(1);
 }
 
@@ -109,9 +110,9 @@ function initModules(): void {
       },
     });
 
-    console.log(`[runner:${RUNNER_ID}] 模块初始化完成: ${toolRegistry.size} 个工具, ${skillLoader.getSkills().length} 个 Skill`);
+    logger.info({ tools: toolRegistry.size, skills: skillLoader.getSkills().length }, '模块初始化完成');
   } catch (err) {
-    console.error(`[runner:${RUNNER_ID}] 模块初始化失败:`, err);
+    logger.error({ err }, '模块初始化失败');
     // 模块初始化失败时仍可启动（echo 模式）
   }
 }
@@ -158,9 +159,9 @@ async function startDirectServer(): Promise<void> {
       });
     });
 
-    console.log(`[runner:${RUNNER_ID}] 直连服务已启动: ${directServer.directUrl}`);
+    logger.info({ url: directServer.directUrl }, '直连服务已启动');
   } catch (err) {
-    console.error(`[runner:${RUNNER_ID}] 直连服务启动失败:`, err);
+    logger.error({ err }, '直连服务启动失败');
     directServer = null;
   }
 }
@@ -269,7 +270,7 @@ function handleDirectMessage(
     }
   }
 
-  console.warn(`[runner:${RUNNER_ID}] 未知直连消息: ${channel}/${action}`);
+  logger.warn({ channel, action }, '未知直连消息');
 }
 
 // ====== WebSocket 连接 ======
@@ -287,7 +288,7 @@ function connect() {
   ws = new WebSocket(url);
 
   ws.on('open', () => {
-    console.log(`[runner:${RUNNER_ID}] 已连接 Server`);
+    logger.info('已连接 Server');
     reconnectAttempts = 0;
     startHeartbeat();
 
@@ -305,18 +306,18 @@ function connect() {
       const msg: ServerMessage = JSON.parse(raw.toString());
       handleServerMessage(msg);
     } catch (err) {
-      console.error(`[runner:${RUNNER_ID}] 消息解析失败:`, err);
+      logger.error({ err }, '消息解析失败');
     }
   });
 
   ws.on('close', (code, reason) => {
-    console.warn(`[runner:${RUNNER_ID}] 连接关闭: ${code} ${reason.toString()}`);
+    logger.warn({ code, reason: reason.toString() }, '连接关闭');
     stopHeartbeat();
     scheduleReconnect();
   });
 
   ws.on('error', (err) => {
-    console.error(`[runner:${RUNNER_ID}] WebSocket 错误:`, err.message);
+    logger.error({ err: err.message }, 'WebSocket 错误');
   });
 }
 
@@ -337,7 +338,7 @@ function stopHeartbeat() {
 function scheduleReconnect() {
   const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempts, RECONNECT_MAX_MS);
   reconnectAttempts++;
-  console.log(`[runner:${RUNNER_ID}] ${delay}ms 后重连 (第 ${reconnectAttempts} 次)`);
+  logger.info({ delay, attempt: reconnectAttempts }, '准备重连');
   setTimeout(connect, delay);
 }
 
@@ -366,9 +367,9 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
       apiBase: cfg.apiBase,
       defaultModel: cfg.model,
     });
-    console.log(`[runner:${RUNNER_ID}] Provider 已缓存: type=${cfg.providerType}, model=${cfg.model || 'default'}`);
+    logger.info({ type: cfg.providerType, model: cfg.model || 'default' }, 'Provider 已缓存');
   } catch (err) {
-    console.error(`[runner:${RUNNER_ID}] Provider 创建失败:`, err);
+    logger.error({ err }, 'Provider 创建失败');
     cachedProvider = null;
   }
   cachedSystemPrompt = cfg.systemPrompt;
@@ -379,7 +380,7 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
 
 function handleServerMessage(msg: ServerMessage) {
   if (msg.type === 'registered') {
-    console.log(`[runner:${RUNNER_ID}] 注册成功`);
+    logger.info('注册成功');
     return;
   }
 
@@ -397,7 +398,7 @@ function handleServerMessage(msg: ServerMessage) {
         const cfg = JSON.parse(plaintext) as import('./protocol.js').RuntimeConfig;
         applyConfig(cfg);
       } catch (err) {
-        console.error(`[runner:${RUNNER_ID}] 加密 config 解密失败:`, err);
+        logger.error({ err }, '加密 config 解密失败');
       }
     } else if (msg.data) {
       applyConfig(msg.data);
@@ -407,7 +408,7 @@ function handleServerMessage(msg: ServerMessage) {
 
   if (msg.type === 'request') {
     handleRequest(msg.requestId, msg.data).catch((err) => {
-      console.error(`[runner:${RUNNER_ID}] 请求处理失败:`, err);
+      logger.error({ err }, '请求处理失败');
       sendResponse(msg.requestId, { type: 'error', message: err instanceof Error ? err.message : String(err) });
     });
     return;
@@ -419,7 +420,7 @@ function handleServerMessage(msg: ServerMessage) {
       pendingConfirms.delete(msg.confirmRequestId);
       resolver(msg.approved);
     } else {
-      console.warn(`[runner:${RUNNER_ID}] 未找到 confirm resolver: ${msg.confirmRequestId}`);
+      logger.warn({ confirmRequestId: msg.confirmRequestId }, '未找到 confirm resolver');
     }
     return;
   }
@@ -483,7 +484,7 @@ function sendResponse(requestId: string, data: AgentResponse) {
 // ====== 优雅退出 ======
 
 function shutdown() {
-  console.log(`[runner:${RUNNER_ID}] 正在关闭...`);
+  logger.info('正在关闭...');
   stopHeartbeat();
   terminalManager?.closeAll();
   if (sharedDeps?.db) {
@@ -500,6 +501,6 @@ process.on('SIGINT', shutdown);
 
 // ====== 启动 ======
 
-console.log(`[runner:${RUNNER_ID}] 启动，连接 ${SERVER_URL}`);
+logger.info({ serverUrl: SERVER_URL }, '启动');
 initModules();
 startDirectServer().then(() => connect());

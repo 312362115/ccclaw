@@ -2,10 +2,12 @@ import { Hono } from 'hono';
 import { runnerManager } from '../core/runner-manager.js';
 import { db, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
+import { authMiddleware } from '../middleware/auth.js';
+import { requireWorkspaceAccess } from '../auth/rbac.js';
 
 const runnerInfoRoute = new Hono();
 
-runnerInfoRoute.get('/workspaces/:id/runner-info', async (c) => {
+runnerInfoRoute.get('/workspaces/:id/runner-info', authMiddleware, requireWorkspaceAccess(), async (c) => {
   const workspaceId = c.req.param('id');
   const [ws] = await db.select({ slug: schema.workspaces.slug })
     .from(schema.workspaces)
