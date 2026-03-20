@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>前端适配 Agent 新能力 — UI 原型</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+
+  .page { max-width: 800px; margin: 0 auto; padding: 24px; }
+  .section-title { font-size: 20px; font-weight: 700; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; color: #0f172a; }
+  .section-title:first-child { margin-top: 16px; }
+  .desc { font-size: 13px; color: #64748b; margin-bottom: 16px; line-height: 1.6; }
+
+  /* Chat message container */
+  .chat-area { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 16px; }
+
+  /* Avatar */
+  .avatar { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .avatar-ai { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+  .avatar-user { background: linear-gradient(135deg, #94a3b8, #64748b); }
+
+  /* Message row */
+  .msg-row { display: flex; gap: 10px; align-items: flex-start; max-width: 720px; }
+  .msg-row.user { flex-direction: row-reverse; margin-left: auto; }
+
+  /* Bubble */
+  .bubble { border-radius: 14px; padding: 12px 16px; font-size: 14px; line-height: 1.7; }
+  .bubble-user { background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; }
+  .bubble-ai { background: #f8fafc; border: 1px solid #e2e8f0; }
+
+  /* ===== Tool Call — 极简日志行风格 ===== */
+  .tool-block { overflow: hidden; }
+
+  .tool-header { display: flex; align-items: center; gap: 6px; padding: 3px 0; cursor: pointer; user-select: none; font-size: 12px; color: #94a3b8; }
+  .tool-header:hover { color: #64748b; }
+  .tool-icon { font-size: 12px; width: 16px; text-align: center; }
+  .tool-name { color: #94a3b8; }
+  .tool-summary { color: #b0b8c4; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool-chevron { color: #cbd5e1; font-size: 10px; transition: transform 0.15s; }
+  .tool-chevron.open { transform: rotate(90deg); }
+  .tool-status { font-size: 10px; font-weight: 500; }
+  .tool-status.success { color: #86efac; }
+  .tool-status.running { color: #93c5fd; }
+  .tool-status.error { color: #fca5a5; }
+
+  .tool-detail { display: none; margin: 4px 0 4px 22px; padding: 8px 10px; font-size: 12px; font-family: 'SF Mono', 'Fira Code', monospace; background: #f8fafc; border-radius: 6px; border: 1px solid #f1f5f9; }
+  .tool-detail.show { display: block; }
+  .tool-detail pre { white-space: pre-wrap; word-break: break-all; color: #475569; line-height: 1.6; max-height: 300px; overflow-y: auto; }
+
+  /* Diff 视图 */
+  .diff-line { padding: 1px 8px; font-family: 'SF Mono', monospace; font-size: 12px; line-height: 1.6; }
+  .diff-del { background: #fef2f2; color: #991b1b; }
+  .diff-add { background: #f0fdf4; color: #166534; }
+  .diff-ctx { color: #64748b; }
+  .diff-header { color: #6366f1; font-weight: 600; padding: 4px 8px; background: #f5f3ff; font-size: 12px; }
+
+  /* Hook 输出 */
+  .hook-output { margin-top: 6px; padding: 6px 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; font-size: 12px; color: #92400e; }
+  .hook-label { font-weight: 600; margin-right: 4px; }
+
+  /* ===== Plan 模式 ===== */
+  .plan-banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; background: #f5f3ff; border: 1px solid #e0e7ff; border-radius: 8px; font-size: 13px; color: #4338ca; }
+  .plan-banner .icon { font-size: 16px; }
+  .plan-banner .text { font-weight: 600; }
+
+  .plan-content { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; font-size: 14px; line-height: 1.8; }
+  .plan-content ol { padding-left: 20px; }
+  .plan-content li { margin-bottom: 4px; }
+  .plan-content code { background: #e2e8f0; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: 'SF Mono', monospace; }
+
+  .plan-actions { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+  .btn-secondary:hover { background: #e2e8f0; }
+
+  /* ===== 图片上传 ===== */
+  .composer-box { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .composer-input { border: none; outline: none; resize: none; font-size: 14px; line-height: 1.6; min-height: 44px; max-height: 160px; font-family: inherit; }
+  .composer-input::placeholder { color: #94a3b8; }
+  .composer-toolbar { display: flex; align-items: center; justify-content: space-between; }
+  .composer-left { display: flex; gap: 4px; }
+  .composer-btn { width: 32px; height: 32px; border: none; background: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 16px; }
+  .composer-btn:hover { background: #f1f5f9; color: #334155; }
+  .composer-send { width: 32px; height: 32px; border: none; background: #2563eb; border-radius: 8px; cursor: pointer; color: #fff; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+  .composer-send:hover { background: #1d4ed8; }
+
+  .image-preview-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .image-thumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+  .image-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .image-thumb .remove { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; background: #ef4444; color: #fff; border: 2px solid #fff; border-radius: 50%; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+  /* 消息中的图片 */
+  .msg-image { max-width: 300px; border-radius: 10px; border: 1px solid #e2e8f0; margin-top: 6px; }
+
+  /* ===== Confirm 请求（改进） ===== */
+  .confirm-block { border: 1px solid #fbbf24; border-radius: 10px; overflow: hidden; background: #fffbeb; }
+  .confirm-header { padding: 8px 12px; font-size: 13px; font-weight: 600; color: #92400e; display: flex; align-items: center; gap: 6px; }
+  .confirm-body { padding: 8px 12px; border-top: 1px solid #fde68a; font-size: 12px; font-family: monospace; color: #78350f; }
+  .confirm-actions { padding: 8px 12px; border-top: 1px solid #fde68a; display: flex; gap: 8px; }
+  .btn-allow { background: #16a34a; color: #fff; }
+  .btn-deny { background: #dc2626; color: #fff; }
+
+  /* Drop zone overlay */
+  .drop-zone { position: relative; }
+  .drop-overlay { display: none; position: absolute; inset: 0; background: rgba(37, 99, 235, 0.08); border: 2px dashed #2563eb; border-radius: 12px; z-index: 10; align-items: center; justify-content: center; font-size: 14px; color: #2563eb; font-weight: 500; }
+  .drop-overlay.active { display: flex; }
+
+  /* Status badge in header */
+  .header-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; background: #fff; border-radius: 10px 10px 0 0; margin-bottom: -1px; }
+  .header-title { font-weight: 600; font-size: 15px; }
+  .header-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .badge-plan { background: #f5f3ff; color: #6366f1; border: 1px solid #e0e7ff; }
+  .badge-streaming { background: #eff6ff; color: #2563eb; }
+
+  .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #92400e; margin: 8px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ============================================ -->
+<h2 class="section-title">1. 工具结果展示 — Claude Code 降噪风格</h2>
+<p class="desc">默认折叠，只显示一行摘要（工具图标 + 名称 + 关键信息）。点击展开查看完整输入/输出。<br>不同工具有不同的摘要和展开内容。</p>
+
+<div class="chat-area">
+  <!-- Read 工具 -->
+  <div class="msg-row">
+    <div class="avatar avatar-ai">AI</div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+      <div class="tool-block">
+        <div class="tool-header" onclick="this.querySelector('.tool-chevron').classList.toggle('open'); this.nextElementSibling.classList.toggle('show');">
+          <span class="tool-icon">📄</span>
+          <span class="tool-name">Read</span>
+          <span class="tool-summary">src/stores/chat.ts (1-45)</span>
+          <span class="tool-status success">✓</span>
+          <span class="tool-chevron">▶</span>
+        </div>
+        <div class="tool-detail">
+          <pre><span style="color:#94a3b8"> 1</span>  import { create } from 'zustand';
+<span style="color:#94a3b8"> 2</span>  import { sendMessage } from '../api/ws';
+<span style="color:#94a3b8"> 3</span>
+<span style="color:#94a3b8"> 4</span>  export interface ChatMessage {
+<span style="color:#94a3b8"> 5</span>    id: string;
+<span style="color:#94a3b8"> 6</span>    role: 'user' | 'assistant';
+<span style="color:#94a3b8">...</span>  <span style="color:#94a3b8">(40 lines)</span></pre>
+        </div>
+      </div>
+
+      <!-- Edit 工具 — diff 视图 -->
+      <div class="tool-block">
+        <div class="tool-header" onclick="this.querySelector('.tool-chevron').classList.toggle('open'); this.nextElementSibling.classList.toggle('show');">
+          <span class="tool-icon">✏️</span>
+          <span class="tool-name">Edit</span>
+          <span class="tool-summary">src/stores/chat.ts — 替换 1 处</span>
+          <span class="tool-status success">✓</span>
+          <span class="tool-chevron">▶</span>
+        </div>
+        <div class="tool-detail">
+          <div class="diff-header">src/stores/chat.ts</div>
+          <div class="diff-line diff-del">- streaming: boolean;</div>
+          <div class="diff-line diff-del">- streamBuffer: string;</div>
+          <div class="diff-line diff-add">+ streamingMap: Map&lt;string, boolean&gt;;</div>
+          <div class="diff-line diff-add">+ streamBufferMap: Map&lt;string, string&gt;;</div>
+        </div>
+      </div>
+
+      <!-- Write 工具 -->
+      <div class="tool-block">
+        <div class="tool-header" onclick="this.querySelector('.tool-chevron').classList.toggle('open'); this.nextElementSibling.classList.toggle('show');">
+          <span class="tool-icon">📝</span>
+          <span class="tool-name">Write</span>
+          <span class="tool-summary">src/utils/helpers.ts (新建, 24 行)</span>
+          <span class="tool-status success">✓</span>
+          <span class="tool-chevron">▶</span>
+        </div>
+        <div class="tool-detail">
+          <pre>export function formatBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (bytes >= 1024 && i < units.length - 1) {
+    bytes /= 1024; i++;
+  }
+  return `${bytes.toFixed(1)} ${units[i]}`;
+}
+<span style="color:#94a3b8">... (24 lines total)</span></pre>
+        </div>
+      </div>
+
+      <!-- Bash 工具 -->
+      <div class="tool-block">
+        <div class="tool-header" onclick="this.querySelector('.tool-chevron').classList.toggle('open'); this.nextElementSibling.classList.toggle('show');">
+          <span class="tool-icon">⚡</span>
+          <span class="tool-name">Bash</span>
+          <span class="tool-summary">pnpm test — 12 passed</span>
+          <span class="tool-status success">✓</span>
+          <span class="tool-chevron">▶</span>
+        </div>
+        <div class="tool-detail">
+          <pre style="color: #d4d4d4; background: #1e1e2e; padding: 10px; border-radius: 6px;">$ pnpm test
+ ✓ src/stores/chat.test.ts (4 tests)
+ ✓ src/utils/helpers.test.ts (8 tests)
+
+ Test Files  2 passed (2)
+      Tests  12 passed (12)
+   Duration  420ms</pre>
+        </div>
+      </div>
+
+      <!-- Bash 失败 -->
+      <div class="tool-block">
+        <div class="tool-header" onclick="this.querySelector('.tool-chevron').classList.toggle('open'); this.nextElementSibling.classList.toggle('show');">
+          <span class="tool-icon">⚡</span>
+          <span class="tool-name">Bash</span>
+          <span class="tool-summary">pnpm typecheck — exit code 2</span>
+          <span class="tool-status error">✗</span>
+          <span class="tool-chevron open">▶</span>
+        </div>
+        <div class="tool-detail show">
+          <pre style="color: #d4d4d4; background: #1e1e2e; padding: 10px; border-radius: 6px;">$ pnpm typecheck
+<span style="color:#f87171">src/index.ts(12,5): error TS2322: Type 'string' is not assignable to type 'number'.</span>
+<span style="color:#f87171">src/utils.ts(5,1): error TS7006: Parameter 'x' implicitly has an 'any' type.</span></pre>
+        </div>
+      </div>
+
+      <!-- 带 Hook 输出的工具 -->
+      <div class="tool-block">
+        <div class="tool-header" onclick="this.querySelector('.tool-chevron').classList.toggle('open'); this.nextElementSibling.classList.toggle('show');">
+          <span class="tool-icon">✏️</span>
+          <span class="tool-name">Edit</span>
+          <span class="tool-summary">src/api/client.ts — 替换 1 处</span>
+          <span class="tool-status success">✓</span>
+          <span class="tool-chevron open">▶</span>
+        </div>
+        <div class="tool-detail show">
+          <div class="diff-header">src/api/client.ts</div>
+          <div class="diff-line diff-del">- const timeout = 5000;</div>
+          <div class="diff-line diff-add">+ const timeout = 10000;</div>
+          <div class="hook-output">
+            <span class="hook-label">🪝 Hook:</span> eslint — 0 errors, 0 warnings ✓
+          </div>
+        </div>
+      </div>
+
+      <div class="bubble bubble-ai">
+        已完成 stores 重构，将全局 streaming 状态改为按 session 隔离的 Map。所有 12 个测试通过。
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>设计说明：</b>
+  ① 错误的工具默认展开（自动 show），成功的折叠
+  ② 摘要行提取关键信息：文件名、行数/替换数、命令+结果摘要
+  ③ Edit 工具用 diff 视图（红删绿增）
+  ④ Bash 用深色终端风格
+  ⑤ Hook 输出作为折叠详情中的附加区块
+</div>
+
+<!-- ============================================ -->
+<h2 class="section-title">2. Plan 模式 UI</h2>
+<p class="desc">Agent 进入 Plan 模式时，顶部显示紫色状态标识。Plan 内容用 Markdown 渲染，底部提供"执行计划"快捷按钮。</p>
+
+<div class="chat-area">
+  <!-- Header with plan badge -->
+  <div class="header-bar">
+    <span class="header-title">新会话</span>
+    <span class="header-badge badge-plan">📋 计划模式</span>
+  </div>
+
+  <div class="msg-row user">
+    <div class="avatar avatar-user">U</div>
+    <div class="bubble bubble-user">/plan 帮我重构 chat store，把全局状态改为按 session 隔离</div>
+  </div>
+
+  <div class="msg-row">
+    <div class="avatar avatar-ai">AI</div>
+    <div style="flex:1">
+      <div class="plan-content">
+        <p style="margin-bottom:8px;font-weight:600;">重构 chat store 按 session 隔离状态</p>
+        <ol>
+          <li>将 <code>streaming: boolean</code> 改为 <code>streamingMap: Map&lt;string, boolean&gt;</code></li>
+          <li>将 <code>streamBuffer: string</code> 改为 <code>streamBufferMap: Map&lt;string, string&gt;</code></li>
+          <li>新增 <code>isStreaming(sessionId)</code> / <code>getStreamBuffer(sessionId)</code> 便捷方法</li>
+          <li>更新 <code>ChatMain.tsx</code> 使用 session-scoped 状态</li>
+          <li>更新 <code>useDirectConnection.ts</code> 使用 per-session buffer</li>
+          <li>添加会话隔离的单元测试</li>
+        </ol>
+        <p style="margin-top:8px;color:#64748b;font-size:13px;">涉及 3 个文件改动 + 1 个新测试文件。</p>
+      </div>
+      <div class="plan-actions">
+        <button class="btn btn-primary">▶ 执行计划</button>
+        <button class="btn btn-secondary">重新规划</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>设计说明：</b>
+  ① Header 显示紫色"📋 计划模式"徽章，执行后消失
+  ② Plan 内容区用浅灰背景+圆角区分普通消息
+  ③ 底部两个按钮："执行计划"发送确认消息，"重新规划"发送修改指令
+</div>
+
+<!-- ============================================ -->
+<h2 class="section-title">3. 图片上传</h2>
+<p class="desc">Composer 增加图片上传能力：点击按钮选图 / 粘贴 / 拖拽。预览缩略图后随消息发送。</p>
+
+<div class="chat-area">
+  <!-- 用户发了一条带图片的消息 -->
+  <div class="msg-row user">
+    <div class="avatar avatar-user">U</div>
+    <div>
+      <div class="bubble bubble-user">这个页面的布局有问题，帮我看看</div>
+      <img class="msg-image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='180' fill='%23e2e8f0'%3E%3Crect width='300' height='180' rx='8'/%3E%3Ctext x='150' y='90' text-anchor='middle' fill='%2394a3b8' font-family='sans-serif' font-size='14'%3E截图预览 (800×480)%3C/text%3E%3C/svg%3E" alt="screenshot">
+    </div>
+  </div>
+
+  <div class="msg-row">
+    <div class="avatar avatar-ai">AI</div>
+    <div class="bubble bubble-ai">我看到了截图。布局问题出在 flex container 没有设置 <code>min-width: 0</code>，导致子元素溢出...</div>
+  </div>
+
+  <!-- Composer with image preview -->
+  <div style="margin-top: 12px;">
+    <div class="composer-box drop-zone">
+      <div class="drop-overlay">📎 松开以添加图片</div>
+      <div class="image-preview-row">
+        <div class="image-thumb">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='%23dbeafe'%3E%3Crect width='64' height='64'/%3E%3Ctext x='32' y='36' text-anchor='middle' fill='%233b82f6' font-size='10' font-family='sans-serif'%3Eimg1%3C/text%3E%3C/svg%3E" alt="preview">
+          <div class="remove">×</div>
+        </div>
+        <div class="image-thumb">
+          <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' fill='%23dbeafe'%3E%3Crect width='64' height='64'/%3E%3Ctext x='32' y='36' text-anchor='middle' fill='%233b82f6' font-size='10' font-family='sans-serif'%3Eimg2%3C/text%3E%3C/svg%3E" alt="preview">
+          <div class="remove">×</div>
+        </div>
+      </div>
+      <textarea class="composer-input" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="1">这两个截图对比一下</textarea>
+      <div class="composer-toolbar">
+        <div class="composer-left">
+          <button class="composer-btn" title="上传图片" style="color:#2563eb;">🖼️</button>
+          <button class="composer-btn" title="附件">📎</button>
+        </div>
+        <button class="composer-send">↑</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <b>设计说明：</b>
+  ① 图片按钮高亮为蓝色，与回形针区分
+  ② 选中图片后在输入框上方显示缩略图行，带 × 删除按钮
+  ③ 拖拽时显示虚线蓝色覆盖层
+  ④ 消息中图片以圆角卡片展示，最大宽度 300px
+  ⑤ 支持粘贴（Ctrl+V）
+</div>
+
+<!-- ============================================ -->
+<h2 class="section-title">4. Confirm 请求（改进）</h2>
+<p class="desc">危险操作确认也用折叠卡片风格，黄色警告色，突出操作内容。</p>
+
+<div class="chat-area">
+  <div class="msg-row">
+    <div class="avatar avatar-ai">AI</div>
+    <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+      <div class="confirm-block">
+        <div class="confirm-header">⚠️ 需要确认 — bash</div>
+        <div class="confirm-body">
+          <pre>git push --force origin main</pre>
+          <div style="margin-top:6px; color:#b45309; font-size:11px;">原因：force push 可能覆盖远程历史</div>
+        </div>
+        <div class="confirm-actions">
+          <button class="btn btn-allow">✓ 允许</button>
+          <button class="btn btn-deny">✗ 拒绝</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

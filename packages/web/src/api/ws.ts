@@ -16,6 +16,7 @@ export type WsMessageType =
   | 'session_done'
   | 'subagent_started'
   | 'subagent_result'
+  | 'plan_mode'
   | 'terminal_output'
   | 'terminal_exit'
   | 'error';

@@ -3,6 +3,7 @@ import { TerminalIcon, FileIcon } from '../../components/icons';
 interface Props {
   title: string;
   aiStatus: 'idle' | 'thinking' | 'typing' | 'disconnected';
+  planMode?: boolean;
   terminalOpen: boolean;
   filePreviewOpen: boolean;
   onToggleTerminal: () => void;
@@ -38,15 +39,20 @@ function StatusDot({ status }: { status: Props['aiStatus'] }) {
   );
 }
 
-export function ChatHeader({ title, aiStatus, terminalOpen, filePreviewOpen, onToggleTerminal, onToggleFilePreview }: Props) {
+export function ChatHeader({ title, aiStatus, planMode, terminalOpen, filePreviewOpen, onToggleTerminal, onToggleFilePreview }: Props) {
   return (
     <div className="flex items-center justify-between px-5 border-b border-line-soft gap-3 min-h-14">
-      {/* 左：标题 + 状态点 */}
+      {/* 左：标题 + 状态点 + Plan 徽章 */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
         <h3 className="text-[15px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">
           {title}
         </h3>
         <StatusDot status={aiStatus} />
+        {planMode && (
+          <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full shrink-0">
+            📋 计划模式
+          </span>
+        )}
       </div>
 
       {/* 右：操作按钮 */}

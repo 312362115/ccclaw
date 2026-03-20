@@ -104,6 +104,11 @@ export function useDirectConnection(workspaceId: string | null) {
               break;
             }
 
+            case 'plan_mode': {
+              chatStore.onPlanMode(sessionId, (event.active as boolean) ?? false);
+              break;
+            }
+
             case 'subagent_started': {
               const label = (event.goal as string) || (event.subagentId as string) || '';
               chatStore.onConsolidation(sessionId, `[子 Agent 启动] ${label}`);

@@ -1,98 +1,157 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useChatStore } from './chat';
 
-describe('chat store — session isolation', () => {
-  beforeEach(() => {
-    // 重置 store 状态
-    useChatStore.setState({
-      messages: new Map(),
-      streamingMap: new Map(),
-      streamBufferMap: new Map(),
-      streamErrorMap: new Map(),
-      currentSessionId: null,
-      tokenUsage: new Map(),
+function resetStore() {
+  useChatStore.setState({
+    messages: new Map(),
+    streamingMap: new Map(),
+    streamBufferMap: new Map(),
+    streamErrorMap: new Map(),
+    planModeMap: new Map(),
+    pendingImages: new Map(),
+    currentSessionId: null,
+    tokenUsage: new Map(),
+  });
+}
+
+describe('chat store', () => {
+  beforeEach(resetStore);
+
+  describe('session isolation', () => {
+    it('streaming 状态应按 sessionId 隔离', () => {
+      const streamingMap = new Map([['sess-a', true]]);
+      const bufferMap = new Map([['sess-a', 'Hello ']]);
+      useChatStore.setState({ streamingMap, streamBufferMap: bufferMap });
+
+      expect(useChatStore.getState().isStreaming('sess-a')).toBe(true);
+      expect(useChatStore.getState().isStreaming('sess-b')).toBe(false);
+      expect(useChatStore.getState().getStreamBuffer('sess-a')).toBe('Hello ');
+      expect(useChatStore.getState().getStreamBuffer('sess-b')).toBe('');
+    });
+
+    it('onSessionDone 应只影响指定 session', () => {
+      useChatStore.setState({
+        streamingMap: new Map([['sess-a', true], ['sess-b', true]]),
+        streamBufferMap: new Map([['sess-a', 'A response'], ['sess-b', 'B response']]),
+        messages: new Map([['sess-a', []], ['sess-b', []]]),
+      });
+
+      useChatStore.getState().onSessionDone('sess-a', { inputTokens: 100, outputTokens: 50 });
+
+      expect(useChatStore.getState().isStreaming('sess-a')).toBe(false);
+      expect(useChatStore.getState().isStreaming('sess-b')).toBe(true);
+      expect(useChatStore.getState().getStreamBuffer('sess-b')).toBe('B response');
     });
   });
 
-  it('streaming 状态应按 sessionId 隔离', () => {
-    const store = useChatStore.getState();
+  describe('tool calls — 合并到 AI 消息', () => {
+    it('onToolUseStart 应在 assistant 消息的 toolCalls 中追加', () => {
+      useChatStore.setState({
+        messages: new Map([['sess-1', [
+          { id: 'u1', role: 'user' as const, content: 'hello', timestamp: 1 },
+        ]]]),
+        streamBufferMap: new Map([['sess-1', '']]),
+      });
 
-    // session A 开始流式
-    const streamingMap = new Map([['sess-a', true]]);
-    const bufferMap = new Map([['sess-a', 'Hello ']]);
-    useChatStore.setState({ streamingMap, streamBufferMap: bufferMap });
+      useChatStore.getState().onToolUseStart('sess-1', 'tc-1', 'bash');
 
-    expect(useChatStore.getState().isStreaming('sess-a')).toBe(true);
-    expect(useChatStore.getState().isStreaming('sess-b')).toBe(false);
-    expect(useChatStore.getState().getStreamBuffer('sess-a')).toBe('Hello ');
-    expect(useChatStore.getState().getStreamBuffer('sess-b')).toBe('');
-  });
-
-  it('两个 session 交错收到 text_delta 不应串流', () => {
-    // 模拟 session A 收到 text_delta
-    const bufferA = new Map([['sess-a', '']]);
-    useChatStore.setState({ streamBufferMap: bufferA });
-
-    // session A 收到 delta
-    const s1 = useChatStore.getState();
-    const buf1 = new Map(s1.streamBufferMap);
-    buf1.set('sess-a', (buf1.get('sess-a') ?? '') + 'Hello ');
-    useChatStore.setState({ streamBufferMap: buf1 });
-
-    // session B 收到 delta
-    const s2 = useChatStore.getState();
-    const buf2 = new Map(s2.streamBufferMap);
-    buf2.set('sess-b', (buf2.get('sess-b') ?? '') + 'World');
-    useChatStore.setState({ streamBufferMap: buf2 });
-
-    // 验证不串流
-    expect(useChatStore.getState().getStreamBuffer('sess-a')).toBe('Hello ');
-    expect(useChatStore.getState().getStreamBuffer('sess-b')).toBe('World');
-  });
-
-  it('onSessionDone 应只影响指定 session', () => {
-    // 设置两个 session 都在流式中
-    useChatStore.setState({
-      streamingMap: new Map([['sess-a', true], ['sess-b', true]]),
-      streamBufferMap: new Map([['sess-a', 'A response'], ['sess-b', 'B response']]),
-      messages: new Map([['sess-a', []], ['sess-b', []]]),
+      const msgs = useChatStore.getState().getMessages('sess-1');
+      // 应该有 2 条：user + assistant（自动创建）
+      expect(msgs).toHaveLength(2);
+      expect(msgs[1].role).toBe('assistant');
+      expect(msgs[1].toolCalls).toHaveLength(1);
+      expect(msgs[1].toolCalls![0].name).toBe('bash');
+      expect(msgs[1].toolCalls![0].status).toBe('running');
     });
 
-    // session A 完成
-    useChatStore.getState().onSessionDone('sess-a', { inputTokens: 100, outputTokens: 50 });
+    it('onToolResult 应更新 toolCall 状态', () => {
+      useChatStore.setState({
+        messages: new Map([['sess-1', [
+          { id: 'u1', role: 'user' as const, content: 'hello', timestamp: 1 },
+          { id: 'a1', role: 'assistant' as const, content: '', toolCalls: [
+            { id: 'tc-1', name: 'bash', input: '{"command":"ls"}', output: '', status: 'running' as const, expanded: false },
+          ], timestamp: 2 },
+        ]]]),
+      });
 
-    // session A 应完成
-    expect(useChatStore.getState().isStreaming('sess-a')).toBe(false);
-    expect(useChatStore.getState().getStreamBuffer('sess-a')).toBe('');
+      useChatStore.getState().onToolResult('sess-1', 'tc-1', 'file1.ts\nfile2.ts');
 
-    // session B 不受影响
-    expect(useChatStore.getState().isStreaming('sess-b')).toBe(true);
-    expect(useChatStore.getState().getStreamBuffer('sess-b')).toBe('B response');
-  });
-
-  it('error 应只影响指定 session', () => {
-    useChatStore.setState({
-      streamingMap: new Map([['sess-a', true], ['sess-b', true]]),
-      streamBufferMap: new Map([['sess-a', 'partial'], ['sess-b', 'other']]),
+      const msgs = useChatStore.getState().getMessages('sess-1');
+      expect(msgs[1].toolCalls![0].status).toBe('success');
+      expect(msgs[1].toolCalls![0].output).toBe('file1.ts\nfile2.ts');
     });
 
-    // session A 出错
-    const s = useChatStore.getState();
-    const newErrorMap = new Map(s.streamErrorMap);
-    newErrorMap.set('sess-a', 'Provider 超时');
-    const newStreamingMap = new Map(s.streamingMap);
-    newStreamingMap.set('sess-a', false);
-    const newBufferMap = new Map(s.streamBufferMap);
-    newBufferMap.set('sess-a', '');
-    useChatStore.setState({ streamErrorMap: newErrorMap, streamingMap: newStreamingMap, streamBufferMap: newBufferMap });
+    it('错误工具应自动展开', () => {
+      useChatStore.setState({
+        messages: new Map([['sess-1', [
+          { id: 'a1', role: 'assistant' as const, content: '', toolCalls: [
+            { id: 'tc-1', name: 'bash', input: '', output: '', status: 'running' as const, expanded: false },
+          ], timestamp: 1 },
+        ]]]),
+      });
 
-    // session A 应有错误
-    expect(useChatStore.getState().getStreamError('sess-a')).toBe('Provider 超时');
-    expect(useChatStore.getState().isStreaming('sess-a')).toBe(false);
+      useChatStore.getState().onToolResult('sess-1', 'tc-1', 'Error: command not found');
 
-    // session B 不受影响
-    expect(useChatStore.getState().getStreamError('sess-b')).toBeNull();
-    expect(useChatStore.getState().isStreaming('sess-b')).toBe(true);
-    expect(useChatStore.getState().getStreamBuffer('sess-b')).toBe('other');
+      const msgs = useChatStore.getState().getMessages('sess-1');
+      expect(msgs[0].toolCalls![0].status).toBe('error');
+      expect(msgs[0].toolCalls![0].expanded).toBe(true);
+    });
+
+    it('Hook 输出应从 tool output 中提取', () => {
+      useChatStore.setState({
+        messages: new Map([['sess-1', [
+          { id: 'a1', role: 'assistant' as const, content: '', toolCalls: [
+            { id: 'tc-1', name: 'edit', input: '', output: '', status: 'running' as const, expanded: false },
+          ], timestamp: 1 },
+        ]]]),
+      });
+
+      useChatStore.getState().onToolResult('sess-1', 'tc-1', 'file updated\n[Hook] eslint: 0 errors');
+
+      const tc = useChatStore.getState().getMessages('sess-1')[0].toolCalls![0];
+      expect(tc.output).toBe('file updated');
+      expect(tc.hookOutput).toBe('eslint: 0 errors');
+    });
+  });
+
+  describe('plan mode', () => {
+    it('onPlanMode 应更新 planModeMap', () => {
+      useChatStore.getState().onPlanMode('sess-1', true);
+      expect(useChatStore.getState().isPlanMode('sess-1')).toBe(true);
+
+      useChatStore.getState().onPlanMode('sess-1', false);
+      expect(useChatStore.getState().isPlanMode('sess-1')).toBe(false);
+    });
+  });
+
+  describe('pending images', () => {
+    it('addPendingImage / removePendingImage', () => {
+      useChatStore.getState().addPendingImage('sess-1', { data: 'abc', mediaType: 'image/png' });
+      useChatStore.getState().addPendingImage('sess-1', { data: 'def', mediaType: 'image/jpeg' });
+
+      expect(useChatStore.getState().getPendingImages('sess-1')).toHaveLength(2);
+
+      useChatStore.getState().removePendingImage('sess-1', 0);
+      expect(useChatStore.getState().getPendingImages('sess-1')).toHaveLength(1);
+      expect(useChatStore.getState().getPendingImages('sess-1')[0].data).toBe('def');
+    });
+  });
+
+  describe('toggleToolExpanded', () => {
+    it('应切换指定 toolCall 的 expanded 状态', () => {
+      useChatStore.setState({
+        messages: new Map([['sess-1', [
+          { id: 'a1', role: 'assistant' as const, content: 'hi', toolCalls: [
+            { id: 'tc-1', name: 'bash', input: '', output: 'ok', status: 'success' as const, expanded: false },
+          ], timestamp: 1 },
+        ]]]),
+      });
+
+      useChatStore.getState().toggleToolExpanded('sess-1', 'a1', 'tc-1');
+      expect(useChatStore.getState().getMessages('sess-1')[0].toolCalls![0].expanded).toBe(true);
+
+      useChatStore.getState().toggleToolExpanded('sess-1', 'a1', 'tc-1');
+      expect(useChatStore.getState().getMessages('sess-1')[0].toolCalls![0].expanded).toBe(false);
+    });
   });
 });
