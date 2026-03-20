@@ -6,6 +6,7 @@
  */
 
 import type { HookRunner } from './hook-runner.js';
+import { resolve } from 'node:path';
 
 // ====== Types ======
 
@@ -39,14 +40,30 @@ const MAX_TOOL_RESULT_CHARS = 16_000;
 
 // ====== ToolRegistry ======
 
+export type GuardDecision = 'allow' | 'block' | 'confirm';
+
+export interface GuardResult {
+  decision: GuardDecision;
+  reason?: string;
+}
+
+/** 请求用户确认的回调，返回 true = 允许 */
+export type ConfirmCallback = (toolName: string, input: unknown, reason: string) => Promise<boolean>;
+
 export class ToolRegistry {
   private tools = new Map<string, Tool>();
   private restrictedTools: Set<string> | null = null;
   private hookRunner: HookRunner | null = null;
+  private confirmCallback: ConfirmCallback | null = null;
 
   /** 设置 Hook Runner（工具执行前后触发用户脚本） */
   setHookRunner(runner: HookRunner): void {
     this.hookRunner = runner;
+  }
+
+  /** 设置确认回调（用于 ToolGuard 需要用户审批的场景） */
+  setConfirmCallback(cb: ConfirmCallback): void {
+    this.confirmCallback = cb;
   }
 
   /** 注册一个工具 */
@@ -123,6 +140,21 @@ export class ToolRegistry {
     try {
       const casted = tool.schema ? castParams(params, tool.schema) : params;
 
+      // ToolGuard 安全检查
+      const guard = checkToolUse(name, casted, process.env.WORKSPACE_DIR ?? '/workspace');
+      if (guard.decision === 'block') {
+        return `Error: 操作被安全策略拦截 — ${guard.reason}`;
+      }
+      if (guard.decision === 'confirm') {
+        if (this.confirmCallback) {
+          const approved = await this.confirmCallback(name, casted, guard.reason ?? '需要确认');
+          if (!approved) {
+            return `Error: 用户拒绝了操作 — ${guard.reason}`;
+          }
+        }
+        // 没有 confirmCallback 时放行（单元测试等场景）
+      }
+
       // Before hook
       if (this.hookRunner?.hasHooks) {
         const hookResult = await this.hookRunner.run('before', name, casted);
@@ -198,4 +230,67 @@ export function castParams(
   }
 
   return result;
+}
+
+// ====== ToolGuard — 安全拦截 ======
+
+const BLOCKED_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /rm\s+(-[a-z]*)?r[a-z]*\s+\/($|\s)/, reason: '禁止删除根目录' },
+  { pattern: /rm\s+(-[a-z]*)?r[a-z]*f[a-z]*\s+\/($|\s)/, reason: '禁止 rm -rf /' },
+  { pattern: /mkfs/, reason: '禁止格式化磁盘' },
+  { pattern: /dd\s+if=.*of=\/dev/, reason: '禁止直接写入设备' },
+  { pattern: /curl\s+.*\|\s*(bash|sh|zsh)/, reason: '禁止从网络下载并执行脚本' },
+  { pattern: /wget\s+.*\|\s*(bash|sh|zsh)/, reason: '禁止从网络下载并执行脚本' },
+  { pattern: /chmod\s+777/, reason: '禁止设置过于宽松的权限' },
+  { pattern: />\s*\/etc\//, reason: '禁止写入系统配置文件' },
+];
+
+const CONFIRM_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /git\s+push\s+.*--force/, reason: 'force push 可能覆盖远程历史' },
+  { pattern: /git\s+push\s+-f/, reason: 'force push 可能覆盖远程历史' },
+  { pattern: /git\s+reset\s+--hard/, reason: 'hard reset 会丢弃未提交的更改' },
+  { pattern: /git\s+clean\s+-f/, reason: '会删除未跟踪的文件' },
+  { pattern: /npm\s+publish/, reason: '发布包到 npm' },
+  { pattern: /DROP\s+TABLE|DROP\s+DATABASE/i, reason: '执行数据库删除操作' },
+  { pattern: /TRUNCATE\s+TABLE/i, reason: '清空数据表' },
+  { pattern: /rm\s+(-[a-z]*)?r/, reason: '递归删除文件' },
+];
+
+const SENSITIVE_FILE_PATTERNS = [
+  /\.env$/,
+  /\.ssh\//,
+  /id_rsa/,
+  /credentials/i,
+  /secrets?\./i,
+];
+
+export function checkToolUse(
+  toolName: string,
+  input: Record<string, unknown>,
+  workspaceDir: string,
+): GuardResult {
+  // bash 命令检查
+  if (toolName === 'bash' && typeof input.command === 'string') {
+    const cmd = input.command;
+    for (const rule of BLOCKED_PATTERNS) {
+      if (rule.pattern.test(cmd)) return { decision: 'block', reason: rule.reason };
+    }
+    for (const rule of CONFIRM_PATTERNS) {
+      if (rule.pattern.test(cmd)) return { decision: 'confirm', reason: rule.reason };
+    }
+  }
+
+  // 文件路径检查（read / write / edit）
+  if (['read', 'write', 'edit'].includes(toolName) && typeof input.path === 'string') {
+    const filePath = input.path;
+    for (const pattern of SENSITIVE_FILE_PATTERNS) {
+      if (pattern.test(filePath)) return { decision: 'confirm', reason: `访问敏感文件: ${filePath}` };
+    }
+    const resolved = resolve(workspaceDir, filePath);
+    if (!resolved.startsWith(resolve(workspaceDir))) {
+      return { decision: 'block', reason: '路径越界：禁止访问工作区外的文件' };
+    }
+  }
+
+  return { decision: 'allow' };
 }
