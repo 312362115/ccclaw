@@ -121,8 +121,8 @@ function initModules(): void {
 
     logger.info({ tools: toolRegistry.size, skills: skillLoader.getSkills().length }, '模块初始化完成');
   } catch (err) {
-    logger.error({ err }, '模块初始化失败');
-    // 模块初始化失败时仍可启动（echo 模式）
+    logger.fatal({ err }, '模块初始化失败，Runner 无法正常工作');
+    throw err;
   }
 }
 
@@ -222,7 +222,15 @@ function handleDirectMessage(
         params: { sessionId: d.sessionId, message: d.message },
       };
       const deps: AgentDeps | undefined = sharedDeps
-        ? { ...sharedDeps, provider: cachedProvider }
+        ? {
+            ...sharedDeps,
+            provider: cachedProvider,
+            serverContext: {
+              workspaceId: cachedWorkspaceId,
+              workspaceName: '',
+              userPreferences: cachedUserPreferences,
+            },
+          }
         : undefined;
 
       // 注册 spawn 工具
@@ -376,6 +384,8 @@ export function waitForConfirm(confirmId: string): Promise<boolean> {
 let cachedProvider: import('./llm/types.js').LLMProvider | null = null;
 let cachedSystemPrompt: string | undefined;
 let cachedSkills: string[] = [];
+let cachedWorkspaceId: string = '';
+let cachedUserPreferences: { customInstructions?: string; toolConfirmMode?: string } = {};
 
 function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
   try {
@@ -399,6 +409,8 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
   }
   cachedSystemPrompt = cfg.systemPrompt;
   cachedSkills = cfg.skills ?? [];
+  cachedWorkspaceId = cfg.workspaceId || '';
+  cachedUserPreferences = cfg.userPreferences || {};
 }
 
 // ====== 消息处理 ======
@@ -488,9 +500,17 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
     sendResponse(requestId, msg);
   };
 
-  // 直接使用缓存的 provider，不再每次创建
+  // 直接使用缓存的 provider 和 serverContext
   const deps: AgentDeps | undefined = sharedDeps
-    ? { ...sharedDeps, provider: cachedProvider }
+    ? {
+        ...sharedDeps,
+        provider: cachedProvider,
+        serverContext: {
+          workspaceId: cachedWorkspaceId,
+          workspaceName: '',
+          userPreferences: cachedUserPreferences,
+        },
+      }
     : undefined;
 
   // 注册 spawn 工具（per-request，需要 provider 和 sessionId）

@@ -535,6 +535,54 @@ describe('Agent Loop E2E', () => {
   });
 
   // ------------------------------------------------------------------
+  // 7. ServerContext 传递
+  // ------------------------------------------------------------------
+  describe('serverContext', () => {
+    it('should pass serverContext to assembler', async () => {
+      provider.setResponses({
+        content: 'Hello!',
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10 },
+        stopReason: 'end_turn',
+      });
+
+      const { onStream, events } = createStreamCollector();
+      const request = makeRequest(sessionId, 'Hi');
+
+      await runAgent(request, onStream, makeDeps({
+        serverContext: {
+          workspaceId: 'ws-test-123',
+          workspaceName: 'Test Workspace',
+          userPreferences: { customInstructions: '请用简体中文回复' },
+        },
+      }));
+
+      // 验证 LLM 收到了自定义指令（通过 systemPrompt）
+      expect(provider.lastParams?.systemPrompt).toContain('请用简体中文回复');
+
+      // 验证 session_done 正常
+      expect(events.filter((e) => e.type === 'session_done')).toHaveLength(1);
+    });
+
+    it('should fallback to empty serverContext when not provided', async () => {
+      provider.setResponses({
+        content: 'Hello!',
+        toolCalls: [],
+        usage: { inputTokens: 50, outputTokens: 10 },
+        stopReason: 'end_turn',
+      });
+
+      const { onStream, events } = createStreamCollector();
+      const request = makeRequest(sessionId, 'Hi');
+
+      // 不传 serverContext
+      await runAgent(request, onStream, makeDeps());
+
+      expect(events.filter((e) => e.type === 'session_done')).toHaveLength(1);
+    });
+  });
+
+  // ------------------------------------------------------------------
   // Edge cases
   // ------------------------------------------------------------------
   describe('edge cases', () => {

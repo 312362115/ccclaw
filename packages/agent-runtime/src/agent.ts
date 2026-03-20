@@ -40,6 +40,7 @@ export interface AgentDeps {
   toolRegistry: ToolRegistry;
   consolidator: Consolidator;
   mcpManager: MCPManager | null;
+  serverContext?: ServerContext;
   maxIterations?: number;
 }
 
@@ -80,7 +81,7 @@ export async function runAgent(
     return;
   }
 
-  const { db, assembler, toolRegistry, consolidator, provider, mcpManager, maxIterations } = deps;
+  const { db, assembler, toolRegistry, consolidator, provider, mcpManager, serverContext: depsServerContext, maxIterations } = deps;
   const { sessionId, message, content: multimodalContent } = request.params;
   const iterLimit = maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
@@ -123,8 +124,8 @@ export async function runAgent(
       toolRegistry.exitRestrictedMode();
     }
 
-    // 3. 组装上下文（systemPrompt 等已通过 config 注入到 assembler）
-    const serverContext: ServerContext = {
+    // 3. 组装上下文（serverContext 由 RuntimeConfig 注入）
+    const serverContext: ServerContext = depsServerContext ?? {
       workspaceId: '',
       workspaceName: '',
       userPreferences: {},
