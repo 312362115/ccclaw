@@ -83,6 +83,10 @@ describe('FileWatcher', () => {
     // Write a file inside node_modules — should be ignored
     await writeFile(join(tmpDir, 'node_modules', 'pkg.js'), 'x');
 
+    // Wait for the debounce window to pass so any node_modules events are
+    // flushed (and filtered) before we start listening for 'real.txt'.
+    await new Promise(r => setTimeout(r, 150));
+
     // Also write a normal file so we know the watcher is working
     const eventsPromise = waitForEvents(watcher, 1);
     await writeFile(join(tmpDir, 'real.txt'), 'data');

@@ -76,7 +76,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeToolListResponse(2, [])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { 'stdio-server': { transport: 'stdio', command: 'my-mcp-server' } },
@@ -98,7 +98,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeToolListResponse(2, [])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { server: { command: 'npx', args: ['-y', 'my-mcp'], env: { MY_KEY: 'val' } } },
@@ -117,7 +117,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeToolListResponse(2, [])),
       close: vi.fn(),
     };
-    (HttpTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (HttpTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { server: { transport: 'sse', url: 'http://localhost:3000/mcp', headers: { Authorization: 'Bearer tok' } } },
@@ -136,7 +136,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeToolListResponse(2, [{ name: 'search', description: 'Search the web' }])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { brave: { command: 'brave-mcp' } },
@@ -160,7 +160,7 @@ describe('MCPManager', () => {
         ])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { brave: { command: 'brave-mcp' } },
@@ -185,7 +185,7 @@ describe('MCPManager', () => {
         ])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { brave: { command: 'brave-mcp', enabledTools: ['search', 'fetch'] } },
@@ -213,7 +213,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(toolCallResponse),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { brave: { command: 'brave-mcp' } },
@@ -241,7 +241,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeErrorResponse(3, 'rate limit exceeded')),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { brave: { command: 'brave-mcp' } },
@@ -262,7 +262,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeErrorResponse(2, 'tools/list not supported')),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { bad: { command: 'bad-mcp' } },
@@ -283,8 +283,8 @@ describe('MCPManager', () => {
     };
 
     (StdioTransport as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce({ send: vi.fn().mockRejectedValue(new Error('spawn failed')), close: vi.fn() })
-      .mockReturnValueOnce(goodTransport);
+      .mockImplementationOnce(() => ({ send: vi.fn().mockRejectedValue(new Error('spawn failed')), close: vi.fn() }))
+      .mockImplementationOnce(() => goodTransport);
 
     const manager = new MCPManager(
       {
@@ -308,7 +308,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeToolListResponse(2, [{ name: 'search', description: 'Search' }])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { brave: { command: 'brave-mcp' } },
@@ -332,7 +332,7 @@ describe('MCPManager', () => {
         .mockResolvedValue(makeToolListResponse(2, [])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport);
 
     const manager = new MCPManager(
       { server: { command: 'mcp-server' } },
@@ -350,7 +350,7 @@ describe('MCPManager', () => {
         .mockResolvedValueOnce(makeToolListResponse(2, [])),
       close: vi.fn(),
     };
-    (StdioTransport as ReturnType<typeof vi.fn>).mockReturnValue(mockTransport2);
+    (StdioTransport as ReturnType<typeof vi.fn>).mockImplementation(() => mockTransport2);
 
     await manager.ensureConnected();
     expect(StdioTransport).toHaveBeenCalledTimes(1);
