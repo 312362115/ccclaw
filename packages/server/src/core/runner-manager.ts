@@ -2,7 +2,7 @@ import Docker from 'dockerode';
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { nanoid, generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, encrypt } from '@ccclaw/shared';
 import { WebSocket } from 'ws';
 import { db, schema } from '../db/index.js';
@@ -153,6 +153,19 @@ export class RunnerManager {
     const serverUrl = `ws://host.docker.internal:${config.PORT}/ws/runner`;
     const directPort = 10000 + Math.floor(Math.random() * 50000);
 
+    // 加载 seccomp profile（如果存在）
+    const seccompPath = join(process.cwd(), '..', 'docker', 'sandbox', 'seccomp.json');
+    const securityOpt: string[] = ['no-new-privileges:true'];
+    if (existsSync(seccompPath)) {
+      try {
+        const profile = readFileSync(seccompPath, 'utf-8');
+        securityOpt.push(`seccomp=${profile}`);
+        logger.info({ slug }, '已加载自定义 seccomp profile');
+      } catch (err) {
+        logger.warn({ slug, err }, 'seccomp profile 加载失败，回退到默认策略');
+      }
+    }
+
     const container = await docker.createContainer({
       Image: 'ccclaw-runner:latest',
       Labels: { [WORKSPACE_LABEL]: 'true', [`${WORKSPACE_LABEL}.slug`]: slug },
@@ -160,6 +173,8 @@ export class RunnerManager {
       HostConfig: {
         Memory: SANDBOX_MEMORY_LIMIT,
         CpuQuota: SANDBOX_CPU_QUOTA,
+        CapDrop: ['ALL'],
+        SecurityOpt: securityOpt,
         Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=100m' },
         Binds: [
           `${paths.home}:/workspace`,

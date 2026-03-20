@@ -1,0 +1,123 @@
+{
+  "defaultAction": "SCMP_ACT_ERRNO",
+  "defaultErrnoRet": 1,
+  "archMap": [
+    { "architecture": "SCMP_ARCH_X86_64", "subArchitectures": ["SCMP_ARCH_X86", "SCMP_ARCH_X32"] },
+    { "architecture": "SCMP_ARCH_AARCH64", "subArchitectures": ["SCMP_ARCH_ARM"] }
+  ],
+  "syscalls": [
+    {
+      "comment": "基础进程/线程",
+      "names": [
+        "clone", "clone3", "fork", "vfork", "execve", "execveat",
+        "exit", "exit_group", "wait4", "waitid",
+        "getpid", "getppid", "gettid", "getuid", "getgid", "geteuid", "getegid",
+        "getgroups", "setgroups",
+        "set_tid_address", "set_robust_list", "get_robust_list",
+        "prctl", "arch_prctl", "seccomp",
+        "sched_getaffinity", "sched_setaffinity", "sched_yield",
+        "sched_getparam", "sched_getscheduler", "sched_setscheduler",
+        "kill", "tgkill", "tkill",
+        "rt_sigaction", "rt_sigprocmask", "rt_sigreturn", "rt_sigtimedwait",
+        "rt_sigsuspend", "rt_sigpending", "rt_sigqueueinfo",
+        "sigaltstack", "restart_syscall"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "内存管理",
+      "names": [
+        "brk", "mmap", "mmap2", "munmap", "mprotect", "madvise",
+        "mremap", "msync", "mincore", "membarrier",
+        "futex", "futex_waitv",
+        "rseq"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "文件系统（Agent 核心能力）",
+      "names": [
+        "open", "openat", "openat2", "close", "close_range",
+        "read", "readv", "pread64", "preadv", "preadv2",
+        "write", "writev", "pwrite64", "pwritev", "pwritev2",
+        "lseek", "fstat", "fstatat64", "newfstatat", "statx", "stat", "lstat",
+        "fstatfs", "statfs",
+        "access", "faccessat", "faccessat2",
+        "readlink", "readlinkat",
+        "getcwd", "chdir", "fchdir",
+        "rename", "renameat", "renameat2",
+        "unlink", "unlinkat",
+        "mkdir", "mkdirat", "rmdir",
+        "link", "linkat", "symlink", "symlinkat",
+        "chmod", "fchmod", "fchmodat",
+        "chown", "fchown", "fchownat", "lchown",
+        "truncate", "ftruncate",
+        "getdents", "getdents64",
+        "fcntl", "fcntl64",
+        "dup", "dup2", "dup3",
+        "pipe", "pipe2",
+        "umask",
+        "utime", "utimes", "utimensat", "futimesat",
+        "fallocate",
+        "copy_file_range",
+        "sendfile",
+        "splice", "tee"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "网络（WebSocket + HTTP）",
+      "names": [
+        "socket", "socketpair",
+        "bind", "listen", "accept", "accept4", "connect",
+        "getsockname", "getpeername",
+        "setsockopt", "getsockopt",
+        "sendto", "recvfrom", "sendmsg", "recvmsg", "sendmmsg", "recvmmsg",
+        "shutdown",
+        "select", "pselect6",
+        "poll", "ppoll",
+        "epoll_create", "epoll_create1", "epoll_ctl", "epoll_wait", "epoll_pwait", "epoll_pwait2"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "时间/定时器",
+      "names": [
+        "clock_gettime", "clock_getres", "clock_nanosleep",
+        "gettimeofday", "nanosleep",
+        "timer_create", "timer_settime", "timer_gettime", "timer_getoverrun", "timer_delete",
+        "timerfd_create", "timerfd_settime", "timerfd_gettime"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "IO 多路复用 / eventfd / inotify（Node.js + file watcher）",
+      "names": [
+        "eventfd", "eventfd2",
+        "inotify_init", "inotify_init1", "inotify_add_watch", "inotify_rm_watch",
+        "signalfd", "signalfd4"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "伪终端（node-pty / bash）",
+      "names": [
+        "ioctl",
+        "setsid", "setpgid", "getpgid", "getpgrp"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    },
+    {
+      "comment": "杂项（Node.js runtime 需要）",
+      "names": [
+        "getrandom", "getuid", "getrlimit", "prlimit64",
+        "uname", "sysinfo",
+        "getrusage",
+        "capget", "capset",
+        "personality",
+        "setitimer", "getitimer"
+      ],
+      "action": "SCMP_ACT_ALLOW"
+    }
+  ]
+}
