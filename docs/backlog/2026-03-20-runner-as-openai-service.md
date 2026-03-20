@@ -1,7 +1,7 @@
 ---
 priority: P2
-status: open
-spec:
+status: done
+spec: docs/specs/2026-03-20-runner-openai-service.md
 plan:
 ---
 
