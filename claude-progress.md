@@ -3,7 +3,7 @@
 ## 相关文档
 - 方案设计：docs/specs/
 - 开发计划：docs/plans/
-- TODO 清单：docs/todos/
+- 需求池：docs/backlog/
 
 ## 当前任务
 - 执行 docs/plans/2026-03-16-repo-stabilization.md（Repo 稳定性加固）

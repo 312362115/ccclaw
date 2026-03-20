@@ -94,7 +94,7 @@
 
 ## 待办事项
 
-详见 `docs/todos/` 目录：
+详见 `docs/backlog/` 目录：
 - 前端适配 Agent 新能力
 - Repo 稳定性加固
 - 前端测试覆盖

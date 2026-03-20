@@ -1,5 +1,7 @@
 ---
+priority: P1
 status: open
+spec:
 plan: docs/plans/2026-03-16-repo-stabilization.md
 ---
 

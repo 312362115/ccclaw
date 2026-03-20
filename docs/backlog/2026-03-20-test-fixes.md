@@ -1,5 +1,7 @@
 ---
+priority: P2
 status: open
+spec:
 plan:
 ---
 
