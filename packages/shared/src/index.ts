@@ -6,3 +6,4 @@ export * from './ecdh.js';
 export * from './id.js';
 export * from './path-validator.js';
 export * from './direct-message.js';
+export * from './agent-protocol.js';

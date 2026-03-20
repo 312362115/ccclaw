@@ -4,7 +4,7 @@ import { decrypt } from '@ccclaw/shared';
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { runnerManager } from './runner-manager.js';
-import type { AgentRequest, AgentResponse, RuntimeConfig } from './runner-manager.js';
+import type { AgentRequest, AgentResponse, RuntimeConfig } from '@ccclaw/shared';
 import { messageBus } from '../bus/instance.js';
 import type { InboundMessage, OutboundMessage } from '../bus/index.js';
 import { OAuthTokenManager } from './oauth-token-manager.js';
@@ -127,6 +127,7 @@ export class AgentManager {
     const { apiKey, apiBase, providerType, model } = await this.resolveProvider(workspaceId, userId);
     const context = await this.assembleContext(workspaceId, userId);
     return {
+      workspaceId,
       apiKey,
       providerType,
       apiBase,

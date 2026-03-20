@@ -11,29 +11,9 @@ import { logger } from '../logger.js';
 import { getWorkspacePaths, buildSafeEnv } from './workspace-storage.js';
 import { WORKSPACE_LABEL, SANDBOX_MEMORY_LIMIT, SANDBOX_CPU_QUOTA } from '@ccclaw/shared';
 
-// 启动注入的配置
-export interface RuntimeConfig {
-  apiKey: string;
-  providerType: string;
-  apiBase?: string;
-  model?: string;
-  systemPrompt?: string;
-  skills?: string[];
-}
-
-// 聊天请求 — 只传消息
-export interface AgentRequest {
-  method: 'run';
-  params: {
-    sessionId: string;
-    message: string;
-  };
-}
-
-export interface AgentResponse {
-  type: 'text_delta' | 'tool_use' | 'tool_result' | 'confirm_request' | 'done' | 'session_done' | 'error';
-  [key: string]: unknown;
-}
+// 协议类型统一从 @ccclaw/shared 导入
+import type { RuntimeConfig, AgentRequest, AgentResponse } from '@ccclaw/shared';
+export type { RuntimeConfig, AgentRequest, AgentResponse };
 
 export type StartMode = 'docker' | 'local' | 'remote';
 
