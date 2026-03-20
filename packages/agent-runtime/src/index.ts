@@ -24,9 +24,13 @@ import { MCPManager } from './mcp-manager.js';
 import { TerminalManager } from './terminal-manager.js';
 
 // 内置工具
-import { bashTool, fileTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
+import { bashTool, readTool, writeTool, editTool, gitTool, globTool, grepTool, webFetchTool } from './tools/index.js';
 import { createMemoryTools } from './tools/memory.js';
 import { createTodoTools } from './tools/todo.js';
+import { createSpawnTool } from './tools/spawn.js';
+import { SubagentManager } from './subagent-manager.js';
+import { HookRunner } from './hook-runner.js';
+import { logger } from './logger.js';
 
 // ====== 环境变量 ======
 
@@ -39,7 +43,7 @@ const WORKSPACE_DB = process.env.WORKSPACE_DB || join(INTERNAL_DIR, 'workspace.d
 const ALLOWED_PATHS = (process.env.ALLOWED_PATHS || WORKSPACE_DIR).split(':').map(p => resolve(p));
 
 if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
-  console.error('缺少必需环境变量: RUNNER_ID, SERVER_URL, AUTH_TOKEN');
+  logger.fatal('缺少必需环境变量: RUNNER_ID, SERVER_URL, AUTH_TOKEN');
   process.exit(1);
 }
 
@@ -65,7 +69,9 @@ function initModules(): void {
 
     // 注册内置工具
     toolRegistry.register(bashTool);
-    toolRegistry.register(fileTool);
+    toolRegistry.register(readTool);
+    toolRegistry.register(writeTool);
+    toolRegistry.register(editTool);
     toolRegistry.register(gitTool);
     toolRegistry.register(globTool);
     toolRegistry.register(grepTool);
@@ -86,6 +92,10 @@ function initModules(): void {
 
     // Consolidator（LLM callback 由 per-request provider 提供，初始为 null）
     const consolidator = new Consolidator(db, null);
+
+    // HookRunner（工具执行前后触发用户脚本）
+    const hookRunner = new HookRunner(WORKSPACE_DIR);
+    toolRegistry.setHookRunner(hookRunner);
 
     // MCP Manager（从环境变量或配置中获取 MCP servers，当前为空）
     const mcpManager = new MCPManager({}, toolRegistry);
@@ -109,9 +119,9 @@ function initModules(): void {
       },
     });
 
-    console.log(`[runner:${RUNNER_ID}] 模块初始化完成: ${toolRegistry.size} 个工具, ${skillLoader.getSkills().length} 个 Skill`);
+    logger.info({ tools: toolRegistry.size, skills: skillLoader.getSkills().length }, '模块初始化完成');
   } catch (err) {
-    console.error(`[runner:${RUNNER_ID}] 模块初始化失败:`, err);
+    logger.error({ err }, '模块初始化失败');
     // 模块初始化失败时仍可启动（echo 模式）
   }
 }
@@ -158,9 +168,9 @@ async function startDirectServer(): Promise<void> {
       });
     });
 
-    console.log(`[runner:${RUNNER_ID}] 直连服务已启动: ${directServer.directUrl}`);
+    logger.info({ url: directServer.directUrl }, '直连服务已启动');
   } catch (err) {
-    console.error(`[runner:${RUNNER_ID}] 直连服务启动失败:`, err);
+    logger.error({ err }, '直连服务启动失败');
     directServer = null;
   }
 }
@@ -214,6 +224,15 @@ function handleDirectMessage(
       const deps: AgentDeps | undefined = sharedDeps
         ? { ...sharedDeps, provider: cachedProvider }
         : undefined;
+
+      // 注册 spawn 工具
+      if (deps && cachedProvider) {
+        const subagentManager = new SubagentManager(deps.db, cachedProvider, deps.toolRegistry);
+        const spawnTool = createSpawnTool(subagentManager, d.sessionId);
+        if (!deps.toolRegistry.getTool('spawn')) {
+          deps.toolRegistry.register(spawnTool);
+        }
+      }
 
       const onStream = (event: AgentResponse) => {
         directServer?.sendToClient(clientId, {
@@ -269,7 +288,7 @@ function handleDirectMessage(
     }
   }
 
-  console.warn(`[runner:${RUNNER_ID}] 未知直连消息: ${channel}/${action}`);
+  logger.warn({ channel, action }, '未知直连消息');
 }
 
 // ====== WebSocket 连接 ======
@@ -287,7 +306,7 @@ function connect() {
   ws = new WebSocket(url);
 
   ws.on('open', () => {
-    console.log(`[runner:${RUNNER_ID}] 已连接 Server`);
+    logger.info('已连接 Server');
     reconnectAttempts = 0;
     startHeartbeat();
 
@@ -305,18 +324,18 @@ function connect() {
       const msg: ServerMessage = JSON.parse(raw.toString());
       handleServerMessage(msg);
     } catch (err) {
-      console.error(`[runner:${RUNNER_ID}] 消息解析失败:`, err);
+      logger.error({ err }, '消息解析失败');
     }
   });
 
   ws.on('close', (code, reason) => {
-    console.warn(`[runner:${RUNNER_ID}] 连接关闭: ${code} ${reason.toString()}`);
+    logger.warn({ code, reason: reason.toString() }, '连接关闭');
     stopHeartbeat();
     scheduleReconnect();
   });
 
   ws.on('error', (err) => {
-    console.error(`[runner:${RUNNER_ID}] WebSocket 错误:`, err.message);
+    logger.error({ err: err.message }, 'WebSocket 错误');
   });
 }
 
@@ -337,7 +356,7 @@ function stopHeartbeat() {
 function scheduleReconnect() {
   const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempts, RECONNECT_MAX_MS);
   reconnectAttempts++;
-  console.log(`[runner:${RUNNER_ID}] ${delay}ms 后重连 (第 ${reconnectAttempts} 次)`);
+  logger.info({ delay, attempt: reconnectAttempts }, '准备重连');
   setTimeout(connect, delay);
 }
 
@@ -366,9 +385,16 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
       apiBase: cfg.apiBase,
       defaultModel: cfg.model,
     });
-    console.log(`[runner:${RUNNER_ID}] Provider 已缓存: type=${cfg.providerType}, model=${cfg.model || 'default'}`);
+    // 同步 Provider 的上下文窗口到 Consolidator
+    if (sharedDeps?.consolidator) {
+      const contextWindow = cachedProvider.capabilities().contextWindow;
+      sharedDeps.consolidator.setContextWindow(contextWindow);
+      logger.info({ type: cfg.providerType, model: cfg.model || 'default', contextWindow }, 'Provider 已缓存');
+    } else {
+      logger.info({ type: cfg.providerType, model: cfg.model || 'default' }, 'Provider 已缓存');
+    }
   } catch (err) {
-    console.error(`[runner:${RUNNER_ID}] Provider 创建失败:`, err);
+    logger.error({ err }, 'Provider 创建失败');
     cachedProvider = null;
   }
   cachedSystemPrompt = cfg.systemPrompt;
@@ -379,7 +405,7 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
 
 function handleServerMessage(msg: ServerMessage) {
   if (msg.type === 'registered') {
-    console.log(`[runner:${RUNNER_ID}] 注册成功`);
+    logger.info('注册成功');
     return;
   }
 
@@ -397,7 +423,7 @@ function handleServerMessage(msg: ServerMessage) {
         const cfg = JSON.parse(plaintext) as import('./protocol.js').RuntimeConfig;
         applyConfig(cfg);
       } catch (err) {
-        console.error(`[runner:${RUNNER_ID}] 加密 config 解密失败:`, err);
+        logger.error({ err }, '加密 config 解密失败');
       }
     } else if (msg.data) {
       applyConfig(msg.data);
@@ -407,7 +433,7 @@ function handleServerMessage(msg: ServerMessage) {
 
   if (msg.type === 'request') {
     handleRequest(msg.requestId, msg.data).catch((err) => {
-      console.error(`[runner:${RUNNER_ID}] 请求处理失败:`, err);
+      logger.error({ err }, '请求处理失败');
       sendResponse(msg.requestId, { type: 'error', message: err instanceof Error ? err.message : String(err) });
     });
     return;
@@ -419,7 +445,7 @@ function handleServerMessage(msg: ServerMessage) {
       pendingConfirms.delete(msg.confirmRequestId);
       resolver(msg.approved);
     } else {
-      console.warn(`[runner:${RUNNER_ID}] 未找到 confirm resolver: ${msg.confirmRequestId}`);
+      logger.warn({ confirmRequestId: msg.confirmRequestId }, '未找到 confirm resolver');
     }
     return;
   }
@@ -467,6 +493,16 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
     ? { ...sharedDeps, provider: cachedProvider }
     : undefined;
 
+  // 注册 spawn 工具（per-request，需要 provider 和 sessionId）
+  if (deps && cachedProvider) {
+    const sessionId = request.params.sessionId;
+    const subagentManager = new SubagentManager(deps.db, cachedProvider, deps.toolRegistry);
+    const spawnTool = createSpawnTool(subagentManager, sessionId);
+    if (!deps.toolRegistry.getTool('spawn')) {
+      deps.toolRegistry.register(spawnTool);
+    }
+  }
+
   await runAgent(request, onStream, deps);
 }
 
@@ -483,7 +519,7 @@ function sendResponse(requestId: string, data: AgentResponse) {
 // ====== 优雅退出 ======
 
 function shutdown() {
-  console.log(`[runner:${RUNNER_ID}] 正在关闭...`);
+  logger.info('正在关闭...');
   stopHeartbeat();
   terminalManager?.closeAll();
   if (sharedDeps?.db) {
@@ -500,6 +536,6 @@ process.on('SIGINT', shutdown);
 
 // ====== 启动 ======
 
-console.log(`[runner:${RUNNER_ID}] 启动，连接 ${SERVER_URL}`);
+logger.info({ serverUrl: SERVER_URL }, '启动');
 initModules();
 startDirectServer().then(() => connect());

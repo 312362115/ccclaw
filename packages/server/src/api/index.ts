@@ -16,8 +16,12 @@ import { oauthRouter } from './oauth.js';
 import { runnerInfoRoute } from './runner-info.js';
 import { skillMarketplaceRouter } from './skill-marketplace.js';
 import { runnerBootstrapRouter } from './runner-bootstrap.js';
+import { apiRateLimitMiddleware } from '../auth/rate-limit.js';
 
 export const api = new Hono();
+
+// 全局 API 限流（基于用户 ID，未认证请求自动跳过）
+api.use('*', apiRateLimitMiddleware());
 
 api.route('/auth', authRouter);
 api.route('/oauth', oauthRouter);

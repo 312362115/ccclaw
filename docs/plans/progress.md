@@ -57,9 +57,50 @@
 | 38 | Heartbeat 自主唤醒 | ✅ 完成 | 2026-03-16 | cron 扫描 + LLM 决策 + SKIP 机制 + server 集成 |
 | 39 | 全链路集成验证 | ✅ 完成 | 2026-03-16 | 4 包 typecheck + 166 测试全部通过 |
 
+## P6 — 平台加固（安全 + 可观测 + 备份）
+
+> 完成时间：2026-03-20
+
+| Task | 名称 | 状态 | 备注 |
+|------|------|------|------|
+| 40 | 全局 API 限流挂载 | ✅ 完成 | apiRateLimitMiddleware 全局生效 |
+| 41 | runner-info 端点鉴权 | ✅ 完成 | authMiddleware + requireWorkspaceAccess |
+| 42 | CSP 安全头 | ✅ 完成 | 生产环境启用，开发环境跳过 |
+| 43 | 请求延迟日志中间件 | ✅ 完成 | Pino 结构化输出 method/path/status/duration |
+| 44 | health 端点增强 | ✅ 完成 | DB 连通性 + Runner 在线数 + 内存占用 |
+| 45 | agent-runtime 接入 Pino | ✅ 完成 | 替换所有 console.log，base 字段自动带 runner ID |
+| 46 | SQLite 自动备份服务 | ✅ 完成 | 主库日备30天 + workspace.db日备14天 + 过期清理 |
+| 47 | 备份恢复 CLI | ✅ 完成 | backup/restore/list 子命令 |
+| 48 | token_usage 数据清理 | ✅ 完成 | 90 天自动清理 + VACUUM |
+
+## P7 — Agent 能力增强（对齐 Claude Code）
+
+> 完成时间：2026-03-20
+> 目标：用国产模型 + Agent 工程能力弥补模型差距
+
+| Task | 名称 | 状态 | 备注 |
+|------|------|------|------|
+| 49 | 工具拆分：read/write/edit | ✅ 完成 | file 拆为独立工具，edit 支持 old→new diff 替换 |
+| 50 | 子代理 spawn 注册 | ✅ 完成 | SubagentManager 接入 Agent Loop |
+| 51 | 上下文压缩优化 | ✅ 完成 | 阈值 30%→70%/80%→90% + 窗口自适配 Provider |
+| 52 | 压缩时机调整 | ✅ 完成 | 从回复后阻塞改为请求前处理 |
+| 53 | Hook 系统 | ✅ 完成 | .ccclaw/hooks.json + before/after 工具钩子 |
+| 54 | 多模态消息支持 | ✅ 完成 | ContentBlock[] + 三个 Provider 适配器 |
+| 55 | Plan 模式 | ✅ 完成 | /plan 先规划后执行 + session 状态管理 |
+
 ## 当前阻塞 / 待决策
 
 （无）
+
+## 待办事项
+
+详见 `docs/todos/` 目录：
+- 前端适配 Agent 新能力
+- Repo 稳定性加固
+- 前端测试覆盖
+- 渠道适配器扩展
+- 测试修复（MCP + FileWatcher）
+- 可观测性二期
 
 ## 变更记录
 
@@ -93,3 +134,5 @@
 - 2026-03-16：Task 36 + 37 + 38 完成，用户偏好 API（DB+Zod+路由）+ SubagentManager（spawn工具+并发/迭代限制）+ Heartbeat 自主唤醒（163 测试通过）
 - 2026-03-16：Task 39 完成，全链路集成验证 — 4 包 typecheck 通过 + 166 测试全部通过
 - 2026-03-16：**P5 全部 19 个 Task (21-39) 完成** 🎉
+- 2026-03-20：**P6 平台加固完成**（Task 40-48）— 安全审计 + 可观测性 + 数据备份
+- 2026-03-20：**P7 Agent 能力增强完成**（Task 49-55）— 工具补全 + 子代理 + 上下文优化 + Hook + 多模态 + Plan 模式

@@ -4,9 +4,9 @@
  * 流程：
  * 1. Intent 分类（stop / correction / continue）
  * 2. 追加用户消息到 workspace.db
- * 3. 组装上下文（ContextAssembler）
- * 4. 迭代调用 LLMProvider.stream() + 执行工具
- * 5. 整合检查（Consolidator）
+ * 3. 上下文整合（Consolidator，在组装前压缩旧消息）
+ * 4. 组装上下文（ContextAssembler）
+ * 5. 迭代调用 LLMProvider.stream() + 执行工具
  */
 
 import type { AgentRequest } from './protocol.js';
@@ -23,7 +23,9 @@ import type {
   LLMToolCall,
   LLMMessage,
   StopReason,
+  ContentBlock,
 } from './llm/types.js';
+import { getTextContent } from './llm/types.js';
 import { classifyIntent } from './intent.js';
 import { toCLIFormat, parseToolCallsFromText } from './tool-format.js';
 
@@ -45,6 +47,25 @@ export interface AgentDeps {
 
 const DEFAULT_MAX_ITERATIONS = 50;
 
+const PLAN_MODE_SUFFIX = `
+
+## 当前处于计划模式
+
+你现在处于 **计划模式**。请：
+1. 分析用户的需求，理解目标
+2. 列出实现步骤（编号列表），每步包含：要改什么文件、做什么改动、为什么
+3. 标注步骤间的依赖关系
+4. 评估风险和边界情况
+
+**不要执行任何工具调用**，只输出计划文本。用户确认后再执行。
+输出格式：先一句话概述方案，然后列出分步计划。`;
+
+const PLAN_EXECUTE_SUFFIX = `
+
+## 执行计划
+
+用户已确认上面的计划。请按照之前制定的计划，逐步执行。每完成一步，简要说明完成情况再继续下一步。`;
+
 // ====== Agent Loop ======
 
 export async function runAgent(
@@ -60,17 +81,26 @@ export async function runAgent(
   }
 
   const { db, assembler, toolRegistry, consolidator, provider, mcpManager, maxIterations } = deps;
-  const { sessionId, message } = request.params;
+  const { sessionId, message, content: multimodalContent } = request.params;
   const iterLimit = maxIterations ?? DEFAULT_MAX_ITERATIONS;
 
   try {
     // 0. Intent 分类
-    const intent = classifyIntent(message);
+    const intent = classifyIntent(message, sessionId);
     if (intent === 'stop') {
       onStream({ type: 'session_done', usage: { inputTokens: 0, outputTokens: 0 } });
       return;
     }
     // correction: 标记上一轮无效，然后继续（后续可扩展）
+    const isPlanMode = intent === 'plan';
+    const isPlanExecute = intent === 'plan_execute';
+
+    // 通知前端 plan 模式状态
+    if (isPlanMode) {
+      onStream({ type: 'plan_mode', active: true });
+    } else if (isPlanExecute) {
+      onStream({ type: 'plan_mode', active: false });
+    }
 
     // 确保 MCP Server 已连接
     if (mcpManager) {
@@ -82,10 +112,18 @@ export async function runAgent(
       db.createSessionWithId(sessionId, { workspace_id: 'default', user_id: 'default', title: '新会话' });
     }
 
-    // 1. 追加用户消息
+    // 1. 追加用户消息（DB 存纯文本，多模态内容只在本次 LLM 调用中使用）
     db.appendMessage({ session_id: sessionId, role: 'user', content: message });
 
-    // 2. 组装上下文（systemPrompt 等已通过 config 注入到 assembler）
+    // 2. 上下文整合（在组装前压缩，对齐 Claude Code 的处理方式）
+    toolRegistry.enterRestrictedMode(['memory_write', 'memory_read', 'memory_search']);
+    try {
+      await consolidator.consolidateIfNeeded(sessionId);
+    } finally {
+      toolRegistry.exitRestrictedMode();
+    }
+
+    // 3. 组装上下文（systemPrompt 等已通过 config 注入到 assembler）
     const serverContext: ServerContext = {
       workspaceId: '',
       workspaceName: '',
@@ -93,23 +131,44 @@ export async function runAgent(
     };
     const ctx = assembler.assemble({ sessionId, serverContext });
 
-    // 3. 获取 provider 能力
+    // 4. 获取 provider 能力
     const caps: ProviderCapabilities = provider.capabilities();
 
-    // 4. 转换工具定义
-    const toolDefs = ctx.tools;
+    // 5. 转换工具定义（plan 模式下不传工具，只生成计划）
+    const toolDefs = isPlanMode ? [] : ctx.tools;
 
-    // 5. Agent 迭代循环
+    // Plan 模式：修改 system prompt，引导 Agent 只输出计划
+    if (isPlanMode) {
+      ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_MODE_SUFFIX;
+    }
+    if (isPlanExecute) {
+      ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_EXECUTE_SUFFIX;
+    }
+
+    // 6. Agent 迭代循环
     let iteration = 0;
-    const history: LLMMessage[] = ctx.messages.map((m) => ({
-      role: m.role as 'user' | 'assistant' | 'tool',
-      content: m.content,
-    }));
+    const history: LLMMessage[] = ctx.messages.map((m, i, arr) => {
+      // 对最后一条 user 消息注入多模态内容（如果有）
+      if (multimodalContent && i === arr.length - 1 && m.role === 'user') {
+        const blocks: ContentBlock[] = [
+          { type: 'text', text: m.content },
+          ...multimodalContent,
+        ];
+        return { role: m.role as 'user', content: blocks } as LLMMessage;
+      }
+      return {
+        role: m.role as 'user' | 'assistant' | 'tool',
+        content: m.content,
+      };
+    });
 
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
 
-    while (iteration < iterLimit) {
+    // Plan 模式只需 1 轮 LLM 调用
+    const effectiveIterLimit = isPlanMode ? 1 : iterLimit;
+
+    while (iteration < effectiveIterLimit) {
       iteration++;
 
       // 构建 ChatParams
@@ -261,15 +320,6 @@ export async function runAgent(
         }
         break;
       }
-    }
-
-    // 6. 整合检查（受限模式）
-    toolRegistry.enterRestrictedMode(['memory_write', 'memory_read', 'memory_search']);
-    try {
-      onStream({ type: 'consolidation', summary: 'Checking context...' });
-      await consolidator.consolidateIfNeeded(sessionId);
-    } finally {
-      toolRegistry.exitRestrictedMode();
     }
 
     onStream({

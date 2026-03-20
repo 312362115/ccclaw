@@ -460,7 +460,7 @@ describe('Agent Loop E2E', () => {
   // 6. Consolidation trigger
   // ------------------------------------------------------------------
   describe('consolidation', () => {
-    it('should emit consolidation event after agent loop', async () => {
+    it('should run consolidation before context assembly (no stream event)', async () => {
       provider.setResponses({
         content: 'Simple response',
         toolCalls: [],
@@ -473,14 +473,13 @@ describe('Agent Loop E2E', () => {
 
       await runAgent(request, onStream, makeDeps());
 
-      // Verify consolidation event is emitted (the agent always calls consolidateIfNeeded)
+      // Consolidation now runs silently before context assembly, no stream event
       const consolidationEvents = events.filter((e) => e.type === 'consolidation');
-      expect(consolidationEvents).toHaveLength(1);
+      expect(consolidationEvents).toHaveLength(0);
 
-      // Also verify session_done comes after consolidation
-      const consolidationIdx = events.findIndex((e) => e.type === 'consolidation');
-      const doneIdx = events.findIndex((e) => e.type === 'session_done');
-      expect(doneIdx).toBeGreaterThan(consolidationIdx);
+      // session_done should still be emitted
+      const doneEvents = events.filter((e) => e.type === 'session_done');
+      expect(doneEvents).toHaveLength(1);
     });
 
     it('should trigger sliding window consolidation with many messages', async () => {
@@ -489,7 +488,7 @@ describe('Agent Loop E2E', () => {
         contextWindowTokens: 500, // Very small window
       });
 
-      // Fill the session with many messages to exceed 30% threshold
+      // Fill the session with many messages to exceed 70% threshold
       for (let i = 0; i < 20; i++) {
         db.appendMessage({
           session_id: sessionId,
@@ -519,9 +518,9 @@ describe('Agent Loop E2E', () => {
         makeDeps({ consolidator: smallConsolidator }),
       );
 
-      // Verify consolidation event was emitted
+      // Consolidation runs silently before context assembly
       const consolidationEvents = events.filter((e) => e.type === 'consolidation');
-      expect(consolidationEvents).toHaveLength(1);
+      expect(consolidationEvents).toHaveLength(0);
 
       // Verify session_done
       const doneEvents = events.filter((e) => e.type === 'session_done');

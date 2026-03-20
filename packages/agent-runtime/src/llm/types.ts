@@ -13,11 +13,53 @@ export interface LLMToolResult {
   output: string;
 }
 
+/** 文本内容块 */
+export interface TextContentBlock {
+  type: 'text';
+  text: string;
+}
+
+/** 图片内容块（支持 base64 和 URL） */
+export interface ImageContentBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    data: string;
+  } | {
+    type: 'url';
+    url: string;
+  };
+}
+
+export type ContentBlock = TextContentBlock | ImageContentBlock;
+
+/**
+ * LLM 消息。content 支持两种格式：
+ * - string: 纯文本（向后兼容）
+ * - ContentBlock[]: 多模态内容块（文本 + 图片）
+ */
 export interface LLMMessage {
   role: 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentBlock[];
   toolCalls?: LLMToolCall[];
   toolResults?: LLMToolResult[];
+}
+
+/** 获取消息的纯文本内容（兼容 string 和 ContentBlock[] 两种格式） */
+export function getTextContent(content: string | ContentBlock[] | null | undefined): string {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  return content
+    .filter((b): b is TextContentBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+}
+
+/** 检查消息是否包含图片 */
+export function hasImageContent(content: string | ContentBlock[]): boolean {
+  if (typeof content === 'string') return false;
+  return content.some((b) => b.type === 'image');
 }
 
 export interface LLMToolDefinition {
@@ -123,6 +165,7 @@ export type AgentStreamEvent =
   | { type: 'subagent_started'; subagentId: string; goal: string }
   | { type: 'subagent_result'; subagentId: string; result: string }
   | { type: 'consolidation'; summary: string }
+  | { type: 'plan_mode'; active: boolean }
   | { type: 'session_done'; usage: TokenUsage };
 
 // ============================================================

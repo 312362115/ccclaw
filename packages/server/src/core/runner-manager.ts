@@ -429,6 +429,11 @@ export class RunnerManager {
       ...(settings.runtimeConfig || {}),
     };
   }
+
+  /** 在线 Runner 数量 */
+  getOnlineCount(): number {
+    return this.runners.size;
+  }
 }
 
 export const runnerManager = new RunnerManager();

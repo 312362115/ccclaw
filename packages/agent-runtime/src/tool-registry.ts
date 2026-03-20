@@ -5,6 +5,8 @@
  * 提供统一的注册、查询、执行接口。
  */
 
+import type { HookRunner } from './hook-runner.js';
+
 // ====== Types ======
 
 export interface ToolSchema {
@@ -40,6 +42,12 @@ const MAX_TOOL_RESULT_CHARS = 16_000;
 export class ToolRegistry {
   private tools = new Map<string, Tool>();
   private restrictedTools: Set<string> | null = null;
+  private hookRunner: HookRunner | null = null;
+
+  /** 设置 Hook Runner（工具执行前后触发用户脚本） */
+  setHookRunner(runner: HookRunner): void {
+    this.hookRunner = runner;
+  }
 
   /** 注册一个工具 */
   register(tool: Tool): void {
@@ -114,7 +122,24 @@ export class ToolRegistry {
 
     try {
       const casted = tool.schema ? castParams(params, tool.schema) : params;
+
+      // Before hook
+      if (this.hookRunner?.hasHooks) {
+        const hookResult = await this.hookRunner.run('before', name, casted);
+        if (hookResult) {
+          // before hook 返回内容时附加到结果前面
+        }
+      }
+
       let result = await tool.execute(casted);
+
+      // After hook
+      if (this.hookRunner?.hasHooks) {
+        const hookResult = await this.hookRunner.run('after', name, casted);
+        if (hookResult) {
+          result += `\n[Hook] ${hookResult}`;
+        }
+      }
 
       if (result.length > MAX_TOOL_RESULT_CHARS) {
         result = result.slice(0, MAX_TOOL_RESULT_CHARS) + '\n...(truncated)';
