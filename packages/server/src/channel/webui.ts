@@ -7,7 +7,7 @@ import { nanoid } from '@ccclaw/shared';
 import { logger } from '../logger.js';
 import { runnerManager } from '../core/runner-manager.js';
 import { messageBus } from '../bus/instance.js';
-import type { OutboundMessage } from '../bus/index.js';
+import type { OutboundMessage, OutboundHandler } from '../bus/index.js';
 
 interface AuthenticatedSocket extends WebSocket {
   userId?: string;
@@ -167,6 +167,21 @@ export function createWebSocketHandler(server: import('node:http').Server) {
   wss.on('connection', (ws: AuthenticatedSocket) => {
     let authenticated = false;
 
+    // 按 sessionId 跟踪当前 socket 的订阅，避免堆积
+    const activeSubscriptions = new Map<string, {
+      outbound: OutboundHandler;
+      cleanup: OutboundHandler;
+    }>();
+
+    // socket 关闭时清理所有订阅
+    ws.on('close', () => {
+      for (const [sessionId, sub] of activeSubscriptions) {
+        messageBus.offSessionOutbound(sessionId, sub.outbound);
+        messageBus.offSessionOutbound(sessionId, sub.cleanup);
+      }
+      activeSubscriptions.clear();
+    });
+
     ws.on('message', async (raw) => {
       try {
         const msg = JSON.parse(raw.toString()) as WsMessage;
@@ -204,21 +219,31 @@ export function createWebSocketHandler(server: import('node:http').Server) {
             return;
           }
 
-          // 订阅该 session 的出站消息，转发到 WebSocket
           const sessionId = msg.sessionId;
-          const outboundHandler = (out: OutboundMessage) => {
+
+          // 幂等订阅：同一 session 已有订阅时先清理再重建
+          const existing = activeSubscriptions.get(sessionId);
+          if (existing) {
+            messageBus.offSessionOutbound(sessionId, existing.outbound);
+            messageBus.offSessionOutbound(sessionId, existing.cleanup);
+          }
+
+          // 订阅该 session 的出站消息，转发到 WebSocket
+          const outboundHandler: OutboundHandler = (out) => {
             safeSend(ws, out);
           };
           messageBus.onSessionOutbound(sessionId, outboundHandler);
 
-          // 监听 done/error 后自动取消订阅
-          const cleanupHandler = (out: OutboundMessage) => {
+          // done/error 后自动取消订阅
+          const cleanupHandler: OutboundHandler = (out) => {
             if (out.sessionId === sessionId && (out.type === 'done' || out.type === 'error')) {
               messageBus.offSessionOutbound(sessionId, outboundHandler);
               messageBus.offSessionOutbound(sessionId, cleanupHandler);
+              activeSubscriptions.delete(sessionId);
             }
           };
           messageBus.onSessionOutbound(sessionId, cleanupHandler);
+          activeSubscriptions.set(sessionId, { outbound: outboundHandler, cleanup: cleanupHandler });
 
           // 发布入站消息到 Bus
           messageBus.publishInbound({
