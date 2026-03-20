@@ -25,9 +25,9 @@ export function ChatMain({
   onToggleFilePreview,
 }: Props) {
   const messages = useChatStore((s) => s.messages.get(sessionId) || EMPTY_MESSAGES);
-  const streaming = useChatStore((s) => s.streaming);
-  const streamBuffer = useChatStore((s) => s.streamBuffer);
-  const streamError = useChatStore((s) => s.streamError);
+  const streaming = useChatStore((s) => s.isStreaming(sessionId));
+  const streamBuffer = useChatStore((s) => s.getStreamBuffer(sessionId));
+  const streamError = useChatStore((s) => s.getStreamError(sessionId));
   const send = useChatStore((s) => s.send);
   const bottomRef = useRef<HTMLDivElement>(null);
 

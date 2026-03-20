@@ -28,11 +28,16 @@ export type DirectSendFn = (msg: unknown) => void;
 
 interface ChatState {
   messages: Map<string, ChatMessage[]>; // sessionId → messages
-  streaming: boolean;
-  streamBuffer: string;
-  streamError: string | null;
+  streamingMap: Map<string, boolean>;   // sessionId → streaming
+  streamBufferMap: Map<string, string>; // sessionId → buffer
+  streamErrorMap: Map<string, string>;  // sessionId → error
   currentSessionId: string | null;
   tokenUsage: Map<string, TokenUsage>; // sessionId → token usage
+
+  // 按 sessionId 读取流式状态的便捷方法
+  isStreaming: (sessionId: string) => boolean;
+  getStreamBuffer: (sessionId: string) => string;
+  getStreamError: (sessionId: string) => string | null;
 
   /** Direct-channel send function — set by useDirectConnection when DIRECT */
   directSend: DirectSendFn | null;
@@ -40,7 +45,6 @@ interface ChatState {
 
   setCurrentSession: (sessionId: string) => void;
   send: (workspaceId: string, sessionId: string, content: string) => void;
-  appendStreamBuffer: (text: string) => void;
   loadMessages: (workspaceId: string, sessionId: string) => Promise<void>;
   getMessages: (sessionId: string) => ChatMessage[];
   initWsListener: () => () => void;
@@ -90,12 +94,16 @@ function updateMessageByToolId(
 
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: new Map(),
-  streaming: false,
-  streamBuffer: '',
-  streamError: null,
+  streamingMap: new Map(),
+  streamBufferMap: new Map(),
+  streamErrorMap: new Map(),
   currentSessionId: null,
   tokenUsage: new Map(),
   directSend: null,
+
+  isStreaming: (sessionId) => get().streamingMap.get(sessionId) ?? false,
+  getStreamBuffer: (sessionId) => get().streamBufferMap.get(sessionId) ?? '',
+  getStreamError: (sessionId) => get().streamErrorMap.get(sessionId) ?? null,
 
   setDirectSend: (fn) => set({ directSend: fn }),
 
@@ -131,7 +139,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
     msgs.push({ id: nextId(), role: 'user', content, timestamp: Date.now() });
     const newMap = new Map(state.messages);
     newMap.set(sessionId, msgs);
-    set({ messages: newMap, streaming: true, streamBuffer: '', streamError: null });
+    const newStreamingMap = new Map(state.streamingMap);
+    newStreamingMap.set(sessionId, true);
+    const newBufferMap = new Map(state.streamBufferMap);
+    newBufferMap.set(sessionId, '');
+    const newErrorMap = new Map(state.streamErrorMap);
+    newErrorMap.delete(sessionId);
+    set({ messages: newMap, streamingMap: newStreamingMap, streamBufferMap: newBufferMap, streamErrorMap: newErrorMap });
 
     if (state.directSend) {
       // Send via direct encrypted channel
@@ -145,10 +159,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Fallback to Server WS relay
       sendMessage(workspaceId, sessionId, content);
     }
-  },
-
-  appendStreamBuffer: (text) => {
-    set({ streamBuffer: get().streamBuffer + text });
   },
 
   getMessages: (sessionId) => get().messages.get(sessionId) || EMPTY_MESSAGES,
@@ -240,8 +250,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // ── Session done ──────────────────────────────────────────────────────────
 
   onSessionDone: (sessionId, tokens) => {
-    const buffer = get().streamBuffer;
     const state = get();
+    const buffer = state.streamBufferMap.get(sessionId) ?? '';
     const msgs = [...(state.messages.get(sessionId) || [])];
     if (buffer) {
       msgs.push({ id: nextId(), role: 'assistant', content: buffer, timestamp: Date.now() });
@@ -250,7 +260,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     newMap.set(sessionId, msgs);
     const newTokenMap = new Map(state.tokenUsage);
     newTokenMap.set(sessionId, tokens);
-    set({ messages: newMap, streaming: false, streamBuffer: '', tokenUsage: newTokenMap });
+    const newStreamingMap = new Map(state.streamingMap);
+    newStreamingMap.set(sessionId, false);
+    const newBufferMap = new Map(state.streamBufferMap);
+    newBufferMap.set(sessionId, '');
+    set({ messages: newMap, streamingMap: newStreamingMap, streamBufferMap: newBufferMap, tokenUsage: newTokenMap });
   },
 
   // ── Confirm request ──────────────────────────────────────────────────────
@@ -315,7 +329,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       if (msg.type === 'text_delta') {
         const text = msg.content || msg.text || '';
-        set({ streamBuffer: state.streamBuffer + text });
+        const newBufferMap = new Map(state.streamBufferMap);
+        newBufferMap.set(sessionId, (newBufferMap.get(sessionId) ?? '') + text);
+        set({ streamBufferMap: newBufferMap });
         return;
       }
 
@@ -414,7 +430,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // ── error — 不新增消息，更新到 streamError 显示在气泡里 ──
       if (msg.type === 'error') {
-        set({ streamError: msg.message || '未知错误', streaming: false, streamBuffer: '' });
+        const newErrorMap = new Map(state.streamErrorMap);
+        newErrorMap.set(sessionId, msg.message || '未知错误');
+        const newStreamingMap = new Map(state.streamingMap);
+        newStreamingMap.set(sessionId, false);
+        const newBufferMap = new Map(state.streamBufferMap);
+        newBufferMap.set(sessionId, '');
+        set({ streamErrorMap: newErrorMap, streamingMap: newStreamingMap, streamBufferMap: newBufferMap });
       }
     });
   },

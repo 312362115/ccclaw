@@ -59,7 +59,9 @@ export function useDirectConnection(workspaceId: string | null) {
           switch (msg.action) {
             case 'text_delta': {
               const text = (event.delta as string) || (event.content as string) || '';
-              chatStore.appendStreamBuffer(text);
+              const newBufferMap = new Map(chatStore.streamBufferMap);
+              newBufferMap.set(sessionId, (newBufferMap.get(sessionId) ?? '') + text);
+              useChatStore.setState({ streamBufferMap: newBufferMap });
               break;
             }
 
@@ -141,7 +143,14 @@ export function useDirectConnection(workspaceId: string | null) {
 
             case 'error': {
               const errorMsg = (event.message as string) || '未知错误';
-              useChatStore.setState({ streamError: errorMsg, streaming: false, streamBuffer: '' });
+              const s = useChatStore.getState();
+              const newErrorMap = new Map(s.streamErrorMap);
+              newErrorMap.set(sessionId, errorMsg);
+              const newStreamingMap = new Map(s.streamingMap);
+              newStreamingMap.set(sessionId, false);
+              const newBufferMap = new Map(s.streamBufferMap);
+              newBufferMap.set(sessionId, '');
+              useChatStore.setState({ streamErrorMap: newErrorMap, streamingMap: newStreamingMap, streamBufferMap: newBufferMap });
               break;
             }
 
