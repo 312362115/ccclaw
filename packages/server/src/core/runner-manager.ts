@@ -2,6 +2,7 @@ import Docker from 'dockerode';
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { nanoid, generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, encrypt } from '@ccclaw/shared';
 import { WebSocket } from 'ws';
 import { db, schema } from '../db/index.js';
@@ -194,19 +195,32 @@ export class RunnerManager {
     const safeEnv = buildSafeEnv(slug);
     const serverUrl = `ws://127.0.0.1:${config.PORT}/ws/runner`;
 
-    const child: ChildProcess = fork(
-      join(process.cwd(), '..', 'agent-runtime', 'dist', 'index.js'),
-      ['--mode', 'runner'],
-      {
+    // 确定性启动：优先源码（开发），回退到构建产物（生产）
+    const runtimeBase = join(process.cwd(), '..', 'agent-runtime');
+    const distEntry = join(runtimeBase, 'dist', 'index.js');
+    const srcEntry = join(runtimeBase, 'src', 'index.ts');
+    const hasDist = existsSync(distEntry);
+    const hasSrc = existsSync(srcEntry);
+
+    let child: ChildProcess;
+
+    if (hasDist) {
+      // 生产模式或已构建：直接 fork 产物
+      child = fork(distEntry, ['--mode', 'runner'], {
         cwd: paths.home,
-        env: {
-          ...safeEnv,
-          RUNNER_ID: runnerId,
-          SERVER_URL: serverUrl,
-          AUTH_TOKEN: config.RUNNER_SECRET,
-        },
-      },
-    ) as ChildProcess;
+        env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET },
+      }) as ChildProcess;
+    } else if (hasSrc) {
+      // 开发模式：用 tsx 从源码启动
+      child = fork(srcEntry, ['--mode', 'runner'], {
+        cwd: paths.home,
+        execArgv: ['--import', 'tsx'],
+        env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET },
+      }) as ChildProcess;
+      logger.info({ slug, runnerId }, '开发模式：使用 tsx 从源码启动 Runner');
+    } else {
+      throw new Error(`Runner 入口文件不存在: 检查 ${distEntry} 或 ${srcEntry}`);
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     (child as any).on('exit', (code: number | null) => {
