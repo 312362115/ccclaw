@@ -23,7 +23,8 @@ runnerInfoRoute.get('/workspaces/:id/runner-info', authMiddleware, requireWorksp
 // 确保 Runner 已接收到最新 config（前端直连建立后调用）
 runnerInfoRoute.post('/workspaces/:id/ensure-config', authMiddleware, requireWorkspaceAccess(), async (c) => {
   const workspaceId = c.req.param('id');
-  const userId = c.get('userId') as string;
+  const user = c.get('user' as never) as { sub: string };
+  const userId = user.sub;
   try {
     const runtimeConfig = await agentManager.buildRuntimeConfig(workspaceId, userId);
     const [ws] = await db.select({ slug: schema.workspaces.slug })
