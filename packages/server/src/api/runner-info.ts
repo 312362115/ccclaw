@@ -26,13 +26,10 @@ runnerInfoRoute.post('/workspaces/:id/ensure-config', authMiddleware, requireWor
   const user = c.get('user' as never) as { sub: string };
   const userId = user.sub;
   try {
+    // ensureRunner 会建立 binding（slug → runnerId）并启动 Runner（如果未启动）
+    const { slug } = await runnerManager.ensureRunner(workspaceId);
     const runtimeConfig = await agentManager.buildRuntimeConfig(workspaceId, userId);
-    const [ws] = await db.select({ slug: schema.workspaces.slug })
-      .from(schema.workspaces)
-      .where(eq(schema.workspaces.id, workspaceId))
-      .limit(1);
-    if (!ws) return c.json({ error: '工作区不存在' }, 404);
-    runnerManager.sendConfig(ws.slug, runtimeConfig);
+    runnerManager.sendConfig(slug, runtimeConfig);
     return c.json({ ok: true });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
