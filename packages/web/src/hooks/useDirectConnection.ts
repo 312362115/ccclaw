@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { DirectWsClient } from '../api/direct-ws';
+import { api } from '../api/client';
 import { useFileTreeStore } from '../stores/file-tree';
 import { useChatStore } from '../stores/chat';
 
@@ -22,6 +23,8 @@ export function useDirectConnection(workspaceId: string | null) {
               console.error('[DirectConnection] Failed to send via direct channel', err);
             });
           });
+          // 触发 Server 推送 config 到 Runner（直连场景下 Runner 可能还没收到 config）
+          api('/workspaces/' + workspaceId + '/ensure-config', { method: 'POST' }).catch(() => {});
         } else {
           useChatStore.getState().setDirectSend(null);
         }
@@ -62,12 +65,16 @@ export function useDirectConnection(workspaceId: string | null) {
     client
       .connect()
       .then(() => {
-        client.send({
-          channel: 'tree',
-          action: 'list',
-          requestId: 'init-' + Date.now(),
-          data: { path: '/', depth: 2 },
-        });
+        // 只在直连/隧道模式下请求文件树
+        const state = client.getState();
+        if (state === 'DIRECT' || state === 'TUNNEL') {
+          client.send({
+            channel: 'tree',
+            action: 'list',
+            requestId: 'init-' + Date.now(),
+            data: { path: '/', depth: 2 },
+          }).catch(() => {});
+        }
       })
       .catch(() => {
         // Fallback to RELAY — DirectWsClient handles this internally

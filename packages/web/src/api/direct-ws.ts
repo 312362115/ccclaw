@@ -156,6 +156,7 @@ export class DirectWsClient {
           return;
         }
 
+        console.log('[DirectWs] 收到消息', msg.channel, msg.action, JSON.stringify(msg.data).slice(0, 100));
         this.onMessage(msg);
       } catch (err) {
         console.error('[DirectWs] Message parse error', err);

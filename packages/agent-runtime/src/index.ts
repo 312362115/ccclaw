@@ -145,7 +145,31 @@ async function startDirectServer(): Promise<void> {
     directServer = new DirectServer({
       host: DIRECT_HOST,
       port: parseInt(process.env.DIRECT_SERVER_PORT || '0', 10),
-      verifyToken: async (token: string) => token === AUTH_TOKEN!,
+      verifyToken: async (token: string) => {
+        // 1. Runner secret (Server → Runner 内部通信)
+        if (token === AUTH_TOKEN!) return true;
+        // 2. JWT token (浏览器直连，用 JWT_SECRET 验证)
+        const jwtSecret = process.env.JWT_SECRET;
+        if (jwtSecret && token.includes('.')) {
+          try {
+            const [, payloadB64] = token.split('.');
+            const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString());
+            // 简单验证：检查 token 未过期且能解码
+            // 完整的签名验证需要 jsonwebtoken 库，这里用 HMAC 手动验证
+            const { createHmac } = await import('node:crypto');
+            const [headerB64, pB64, signature] = token.split('.');
+            const expected = createHmac('sha256', jwtSecret)
+              .update(`${headerB64}.${pB64}`)
+              .digest('base64url');
+            if (expected !== signature) return false;
+            if (payload.exp && payload.exp * 1000 < Date.now()) return false;
+            return true;
+          } catch {
+            return false;
+          }
+        }
+        return false;
+      },
       onMessage: (clientId: string, msg: DirectMessage) => handleDirectMessage(clientId, msg, treeHandler, fileHandler),
     });
 

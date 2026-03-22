@@ -222,7 +222,7 @@ export class RunnerManager {
       // 生产模式或已构建：直接 fork 产物
       child = fork(distEntry, ['--mode', 'runner'], {
         cwd: paths.home,
-        env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET },
+        env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET, JWT_SECRET: config.JWT_SECRET },
       }) as ChildProcess;
     } else if (hasSrc) {
       // 开发模式：用 tsx 从源码启动
@@ -236,7 +236,7 @@ export class RunnerManager {
       child = fork(srcEntry, ['--mode', 'runner'], {
         cwd: paths.home,
         execArgv: ['--require', preflightPath, '--import', `file://${loaderPath}`],
-        env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET },
+        env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET, JWT_SECRET: config.JWT_SECRET },
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       }) as ChildProcess;
       logger.info({ slug, runnerId }, '开发模式：使用 tsx 从源码启动 Runner');
