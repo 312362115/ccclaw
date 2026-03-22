@@ -92,12 +92,12 @@ export function createWebSocketHandler(server: import('node:http').Server) {
         }
       });
 
-      // Handle runner register message (ECDH public key + direct URL)
+      // Handle runner register message (direct URL)
       ws.on('message', (raw) => {
         try {
           const msg = JSON.parse(raw.toString());
-          if (msg.type === 'register' && msg.publicKey) {
-            runnerManager.updateRunnerInfo(runnerId, msg.publicKey, msg.directUrl);
+          if (msg.type === 'register') {
+            runnerManager.updateRunnerInfo(runnerId, msg.directUrl);
           }
         } catch {
           // Ignore parse errors — already handled by runnerManager

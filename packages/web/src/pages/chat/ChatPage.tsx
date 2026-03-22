@@ -23,6 +23,7 @@ export function ChatPage() {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const initWsListener = useChatStore((s) => s.initWsListener);
   const loadMessages = useChatStore((s) => s.loadMessages);
+  const setStoreSession = useChatStore((s) => s.setCurrentSession);
   const previewPath = useFileTreeStore((s) => s.previewPath);
 
   // Runner 直连（文件树 + 聊天加密通道）
@@ -54,6 +55,7 @@ export function ChatPage() {
         setCurrentWorkspace(target);
         const sid = `session-${target.slug}`;
         setCurrentSessionId(sid);
+        setStoreSession(sid);
         loadMessages(target.id, sid);
       }
     }).catch(() => {});
@@ -64,11 +66,13 @@ export function ChatPage() {
     localStorage.setItem('cc-last-workspace', ws.id);
     const sessionId = `session-${ws.slug}`;
     setCurrentSessionId(sessionId);
+    setStoreSession(sessionId);
     loadMessages(ws.id, sessionId);
   };
 
   const handleSelectSession = (workspaceId: string, sessionId: string) => {
     setCurrentSessionId(sessionId);
+    setStoreSession(sessionId);
     loadMessages(workspaceId, sessionId);
   };
 

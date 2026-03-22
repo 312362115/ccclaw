@@ -6,7 +6,7 @@ import { resolve, join } from 'node:path';
 import { runAgent } from './agent.js';
 import type { AgentDeps } from './agent.js';
 import type { ServerMessage, AgentResponse } from './protocol.js';
-import { generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, decrypt as aesDecrypt } from '@ccclaw/shared';
+// ECDH 已移除，加密下沉到传输层（TLS）
 import { DirectServer } from './direct-server.js';
 import { FileWatcher } from './file-watcher.js';
 import { TreeHandler } from './handlers/tree-handler.js';
@@ -47,9 +47,8 @@ if (!RUNNER_ID || !SERVER_URL || !AUTH_TOKEN) {
   process.exit(1);
 }
 
-// ====== ECDH 密钥对 & 直连服务 ======
+// ====== 直连服务 ======
 
-const registrationKeyPair = generateECDHKeyPair();
 let directServer: DirectServer | null = null;
 
 // ====== 模块初始化 ======
@@ -144,15 +143,15 @@ async function startDirectServer(): Promise<void> {
     const DIRECT_HOST = process.env.DIRECT_SERVER_HOST || '127.0.0.1';
 
     directServer = new DirectServer({
-      keyPair: registrationKeyPair,
       host: DIRECT_HOST,
+      port: parseInt(process.env.DIRECT_SERVER_PORT || '0', 10),
       verifyToken: async (token: string) => token === AUTH_TOKEN!,
       onMessage: (clientId: string, msg: DirectMessage) => handleDirectMessage(clientId, msg, treeHandler, fileHandler),
     });
 
     await directServer.start();
 
-    // Set up tunnel send callback — pipe encrypted frames back to Server
+    // Set up tunnel send callback — pipe JSON frames back to Server
     directServer.setTunnelSend((clientId: string, data: string) => {
       sendToServer({ type: 'tunnel_frame', clientId, data });
     });
@@ -256,7 +255,7 @@ function handleDirectMessage(
           channel: 'chat',
           action: event.type,
           requestId,
-          data: event,
+          data: { ...event, sessionId: d.sessionId },
         });
       };
 
@@ -269,7 +268,7 @@ function handleDirectMessage(
           channel: 'chat',
           action: 'error',
           requestId,
-          data: { type: 'error', message: err instanceof Error ? err.message : String(err) },
+          data: { type: 'error', sessionId: d.sessionId, message: err instanceof Error ? err.message : String(err) },
         });
       });
       return;
@@ -331,13 +330,12 @@ function connect() {
     reconnectAttempts = 0;
     startHeartbeat();
 
-    // Send ECDH registration with public key and direct URL
-    const registerMsg: import('./protocol.js').RunnerMessage = {
+    // Send registration with direct URL
+    sendToServer({
       type: 'register',
-      publicKey: registrationKeyPair.publicKeyBase64,
+      publicKey: '',  // 保留字段兼容性，不再使用
       directUrl: directServer?.directUrl ?? '',
-    };
-    sendToServer(registerMsg);
+    });
   });
 
   ws.on('message', (raw) => {
@@ -438,19 +436,9 @@ function handleServerMessage(msg: ServerMessage) {
     return;
   }
 
-  // 启动注入 / 变动下发（支持加密 config）
+  // 启动注入 / 变动下发（明文 config）
   if (msg.type === 'config') {
-    if (msg.encrypted && msg.serverPublicKey) {
-      try {
-        const serverPub = publicKeyFromBase64(msg.serverPublicKey);
-        const sharedKey = deriveSharedKey(registrationKeyPair.privateKey, serverPub);
-        const plaintext = aesDecrypt(msg.encrypted, sharedKey.toString('hex'));
-        const cfg = JSON.parse(plaintext) as import('./protocol.js').RuntimeConfig;
-        applyConfig(cfg);
-      } catch (err) {
-        logger.error({ err }, '加密 config 解密失败');
-      }
-    } else if (msg.data) {
+    if (msg.data) {
       applyConfig(msg.data);
     }
     return;

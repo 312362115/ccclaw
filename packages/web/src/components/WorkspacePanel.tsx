@@ -180,7 +180,7 @@ export function WorkspacePanel({
 
   const connLabel = connectionState === 'DIRECT' || connectionState === 'TUNNEL'
     ? '已连接'
-    : connectionState === 'CONNECTING' || connectionState === 'TUNNEL_CONNECTING'
+    : connectionState === 'CONNECTING'
       ? '连接中...'
       : connectionState === 'DISCONNECTED'
         ? '未连接'
@@ -188,7 +188,7 @@ export function WorkspacePanel({
 
   const connColor = connectionState === 'DIRECT' || connectionState === 'TUNNEL'
     ? 'bg-green-500'
-    : connectionState === 'CONNECTING' || connectionState === 'TUNNEL_CONNECTING'
+    : connectionState === 'CONNECTING'
       ? 'bg-yellow-500'
       : connectionState === 'DISCONNECTED'
         ? 'bg-red-500'

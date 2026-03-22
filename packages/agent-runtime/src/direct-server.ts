@@ -1,38 +1,25 @@
-import { createServer, type Server, type IncomingMessage } from 'node:http';
+import { createServer as createHttpServer, type Server, type IncomingMessage } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
-import {
-  generateECDHKeyPair,
-  deriveSharedKey,
-  publicKeyFromBase64,
-  encryptFrame,
-  decryptFrame,
-  serializeDirectMessage,
-  parseDirectMessage,
-  type ECDHKeyPair,
-  type DirectMessage,
-} from '@ccclaw/shared';
-import { randomUUID } from 'node:crypto';
+import { nanoid, type DirectMessage } from '@ccclaw/shared';
 
 interface ClientSession {
-  ws: WebSocket | null;  // null for tunnel clients
-  sharedKey: Buffer;
-  sendCounter: number;
-  recvCounter: number;
+  ws: WebSocket | null; // null for tunnel clients
 }
 
 export interface DirectServerOptions {
-  keyPair: ECDHKeyPair;
   verifyToken: (token: string) => Promise<boolean>;
   onMessage: (clientId: string, msg: DirectMessage) => void;
   host?: string;
+  tls?: { cert: string; key: string };
 }
 
 export class DirectServer {
   private readonly _host: string;
-  private readonly _keyPair: ECDHKeyPair;
   private readonly _verifyToken: (token: string) => Promise<boolean>;
-  private _onMessage: (clientId: string, msg: DirectMessage) => void;
+  private readonly _onMessage: (clientId: string, msg: DirectMessage) => void;
+  private readonly _tls?: { cert: string; key: string };
 
   private _httpServer: Server | undefined;
   private _wss: WebSocketServer | undefined;
@@ -41,9 +28,9 @@ export class DirectServer {
 
   constructor(options: DirectServerOptions) {
     this._host = options.host ?? '127.0.0.1';
-    this._keyPair = options.keyPair;
     this._verifyToken = options.verifyToken;
     this._onMessage = options.onMessage;
+    this._tls = options.tls;
   }
 
   setTunnelSend(send: (clientId: string, data: string) => void): void {
@@ -58,15 +45,25 @@ export class DirectServer {
 
   get directUrl(): string {
     const advertiseHost = process.env.DIRECT_SERVER_ADVERTISE_HOST || this._host;
-    return `ws://${advertiseHost}:${this.port}`;
+    const protocol = this._tls ? 'wss' : 'ws';
+    return `${protocol}://${advertiseHost}:${this.port}`;
   }
 
-  setMessageHandler(handler: (clientId: string, msg: DirectMessage) => void): void {
-    this._onMessage = handler;
+  // Alias for backward compatibility
+  getPort(): number {
+    return this.port;
   }
 
   async start(): Promise<void> {
-    this._httpServer = createServer();
+    if (this._tls) {
+      this._httpServer = createHttpsServer({
+        cert: this._tls.cert,
+        key: this._tls.key,
+      });
+    } else {
+      this._httpServer = createHttpServer();
+    }
+
     this._wss = new WebSocketServer({ noServer: true });
 
     this._httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
@@ -96,18 +93,13 @@ export class DirectServer {
     const session = this._clients.get(clientId);
     if (!session) return;
 
-    const plaintext = serializeDirectMessage(msg);
-    const frame = encryptFrame(plaintext, session.sharedKey, session.sendCounter);
-    console.log('[DirectServer] sendToClient:', clientId, msg.channel, msg.action, 'counter:', session.sendCounter);
-    session.sendCounter++;
+    const json = JSON.stringify(msg);
 
     if (session.ws) {
-      // Direct WebSocket client
       if (session.ws.readyState !== WebSocket.OPEN) return;
-      session.ws.send(frame);
+      session.ws.send(json);
     } else if (this._tunnelSend) {
-      // Tunnel client — send via Server relay as base64
-      this._tunnelSend(clientId, Buffer.from(frame).toString('base64'));
+      this._tunnelSend(clientId, json);
     }
   }
 
@@ -117,7 +109,7 @@ export class DirectServer {
     }
   }
 
-  /** Handle a tunnel frame forwarded from Server (base64-encoded). */
+  /** Handle a tunnel frame forwarded from Server (plain JSON string). */
   handleTunnelFrame(clientId: string, data: string): void {
     // Empty data signals tunnel client disconnect
     if (!data) {
@@ -125,54 +117,16 @@ export class DirectServer {
       return;
     }
 
-    const raw = Buffer.from(data, 'base64');
-    const session = this._clients.get(clientId);
-
-    if (!session) {
-      // No session yet — expect handshake (JSON text)
-      try {
-        const msg = JSON.parse(raw.toString('utf8'));
-        if (msg.type !== 'handshake' || !msg.clientPublicKey) {
-          return; // invalid handshake, ignore
-        }
-
-        const clientPub = publicKeyFromBase64(msg.clientPublicKey);
-        const connKp = generateECDHKeyPair();
-        const sharedKey = deriveSharedKey(connKp.privateKey, clientPub);
-
-        const newSession: ClientSession = {
-          ws: null, // tunnel client — no direct WS
-          sharedKey,
-          sendCounter: 0,
-          recvCounter: 0,
-        };
-        this._clients.set(clientId, newSession);
-        console.log('[DirectServer] Tunnel handshake OK:', clientId);
-
-        // Send handshake_ok back through tunnel
-        const reply = JSON.stringify({
-          type: 'handshake_ok',
-          runnerPublicKey: connKp.publicKeyBase64,
-        });
-        const replyBuf = Buffer.from(reply, 'utf8');
-        this._tunnelSend?.(clientId, replyBuf.toString('base64'));
-      } catch {
-        // invalid handshake data, ignore
-      }
-      return;
+    // Ensure tunnel client is registered
+    if (!this._clients.has(clientId)) {
+      this._clients.set(clientId, { ws: null });
     }
 
-    // Session exists — encrypted binary frame
     try {
-      const plaintext = decryptFrame(raw, session.sharedKey, session.recvCounter);
-      session.recvCounter++;
-      const msg = parseDirectMessage(plaintext);
-      console.log('[DirectServer] Tunnel message:', clientId, msg.channel, msg.action);
+      const msg = JSON.parse(data) as DirectMessage;
       this._onMessage(clientId, msg);
-    } catch (err) {
-      // Decryption failed — remove tunnel client session
-      console.error('[DirectServer] Tunnel frame decryption failed:', clientId, String(err));
-      this._clients.delete(clientId);
+    } catch {
+      // 无效 JSON，忽略
     }
   }
 
@@ -191,69 +145,35 @@ export class DirectServer {
       return;
     }
 
-    this._verifyToken(token).then((valid) => {
-      if (!valid) {
-        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    this._verifyToken(token)
+      .then((valid) => {
+        if (!valid) {
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+        this._wss!.handleUpgrade(req, socket, head, (ws) => {
+          this._wss!.emit('connection', ws, req);
+        });
+      })
+      .catch(() => {
+        socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
         socket.destroy();
-        return;
-      }
-      this._wss!.handleUpgrade(req, socket, head, (ws) => {
-        this._wss!.emit('connection', ws, req);
       });
-    }).catch(() => {
-      socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
-      socket.destroy();
-    });
   }
 
   private _handleConnection(ws: WebSocket): void {
-    const clientId = randomUUID();
-    let handshakeDone = false;
-    let session: ClientSession | undefined;
+    const clientId = nanoid();
+
+    this._clients.set(clientId, { ws });
 
     ws.on('message', (data: Buffer | string) => {
-      if (!handshakeDone) {
-        // Expect handshake message (JSON text)
-        try {
-          const msg = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
-          if (msg.type !== 'handshake' || !msg.clientPublicKey) {
-            ws.close(4002, 'Invalid handshake');
-            return;
-          }
-
-          const clientPub = publicKeyFromBase64(msg.clientPublicKey);
-          // Per-connection ephemeral keypair for forward secrecy
-          const connKp = generateECDHKeyPair();
-          const sharedKey = deriveSharedKey(connKp.privateKey, clientPub);
-
-          session = {
-            ws,
-            sharedKey,
-            sendCounter: 0,
-            recvCounter: 0,
-          };
-          this._clients.set(clientId, session);
-          handshakeDone = true;
-
-          ws.send(JSON.stringify({
-            type: 'handshake_ok',
-            runnerPublicKey: connKp.publicKeyBase64,
-          }));
-        } catch {
-          ws.close(4002, 'Invalid handshake');
-        }
-        return;
-      }
-
-      // Post-handshake: binary encrypted frames
       try {
-        const frame = Buffer.from(data as ArrayLike<number>);
-        const plaintext = decryptFrame(frame, session!.sharedKey, session!.recvCounter);
-        session!.recvCounter++;
-        const msg = parseDirectMessage(plaintext);
+        const text = typeof data === 'string' ? data : data.toString('utf8');
+        const msg = JSON.parse(text) as DirectMessage;
         this._onMessage(clientId, msg);
-      } catch (err) {
-        ws.close(4003, 'Decryption failed');
+      } catch {
+        ws.close(4002, 'Invalid JSON');
       }
     });
 

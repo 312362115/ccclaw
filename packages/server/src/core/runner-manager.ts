@@ -4,7 +4,7 @@ import type { ChildProcess } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { nanoid, generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, encrypt } from '@ccclaw/shared';
+import { nanoid } from '@ccclaw/shared';
 import { WebSocket } from 'ws';
 import { db, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
@@ -37,7 +37,6 @@ interface RunnerInfo {
   childProcess?: ChildProcess;
   terminalCallback?: (msg: Record<string, unknown>) => void;
   tunnelCallback?: (msg: { clientId: string; data: string }) => void;
-  publicKey?: string;      // Runner ECDH public key (base64)
   directUrl?: string;      // Runner direct connect URL
 }
 
@@ -111,10 +110,9 @@ export class RunnerManager {
     return this.bindings.get(workspaceSlug);
   }
 
-  updateRunnerInfo(runnerId: string, publicKey?: string, directUrl?: string) {
+  updateRunnerInfo(runnerId: string, directUrl?: string) {
     const runner = this.runners.get(runnerId);
     if (!runner) return;
-    if (publicKey) runner.publicKey = publicKey;
     if (directUrl) runner.directUrl = directUrl;
     logger.info({ runnerId, directUrl }, 'Runner info updated');
   }
@@ -294,20 +292,7 @@ export class RunnerManager {
     const runner = this.runners.get(runnerId);
     if (!runner || runner.ws.readyState !== WebSocket.OPEN) return;
 
-    if (runner.publicKey) {
-      const serverKP = generateECDHKeyPair();
-      const runnerPub = publicKeyFromBase64(runner.publicKey);
-      const sharedKey = deriveSharedKey(serverKP.privateKey, runnerPub);
-      const plaintext = JSON.stringify(runtimeConfig);
-      const encrypted = encrypt(plaintext, sharedKey.toString('hex'));
-      runner.ws.send(JSON.stringify({
-        type: 'config',
-        encrypted,
-        serverPublicKey: serverKP.publicKeyBase64,
-      }));
-    } else {
-      runner.ws.send(JSON.stringify({ type: 'config', data: runtimeConfig }));
-    }
+    runner.ws.send(JSON.stringify({ type: 'config', data: runtimeConfig }));
     logger.info({ runnerId, providerType: runtimeConfig.providerType, model: runtimeConfig.model }, 'Config pushed to runner');
   }
 
