@@ -243,7 +243,7 @@ function handleDirectMessage(
   if (channel === 'chat') {
     if (action === 'message') {
       const d = data as { sessionId: string; message: string };
-      logger.info({ sessionId: d.sessionId, message: d.message?.slice(0, 50) }, '收到 chat 消息（直连通道）');
+      logger.info({ sessionId: d.sessionId, message: d.message?.slice(0, 50), hasProvider: !!cachedProvider, hasSharedDeps: !!sharedDeps }, '收到 chat 消息（直连通道）');
       if (!cachedProvider) {
         sendError('NO_PROVIDER', 'Provider 未配置');
         return;
@@ -462,6 +462,7 @@ function handleServerMessage(msg: ServerMessage) {
 
   // 启动注入 / 变动下发（明文 config）
   if (msg.type === 'config') {
+    logger.info({ hasData: !!msg.data, providerType: (msg.data as any)?.providerType }, '收到 config 消息');
     if (msg.data) {
       applyConfig(msg.data);
     }
