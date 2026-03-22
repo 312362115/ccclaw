@@ -98,6 +98,7 @@ export class DirectServer {
 
     const plaintext = serializeDirectMessage(msg);
     const frame = encryptFrame(plaintext, session.sharedKey, session.sendCounter);
+    console.log('[DirectServer] sendToClient:', clientId, msg.channel, msg.action, 'counter:', session.sendCounter);
     session.sendCounter++;
 
     if (session.ws) {
@@ -146,6 +147,7 @@ export class DirectServer {
           recvCounter: 0,
         };
         this._clients.set(clientId, newSession);
+        console.log('[DirectServer] Tunnel handshake OK:', clientId);
 
         // Send handshake_ok back through tunnel
         const reply = JSON.stringify({
@@ -165,9 +167,11 @@ export class DirectServer {
       const plaintext = decryptFrame(raw, session.sharedKey, session.recvCounter);
       session.recvCounter++;
       const msg = parseDirectMessage(plaintext);
+      console.log('[DirectServer] Tunnel message:', clientId, msg.channel, msg.action);
       this._onMessage(clientId, msg);
     } catch (err) {
       // Decryption failed — remove tunnel client session
+      console.error('[DirectServer] Tunnel frame decryption failed:', clientId, String(err));
       this._clients.delete(clientId);
     }
   }

@@ -203,6 +203,14 @@ function handleDirectMessage(
     });
   };
 
+  // 处理 system ping → 回复 pong
+  if (channel === 'system' && action === 'ping') {
+    if (directServer) {
+      directServer.sendToClient(clientId, { channel: 'system', action: 'pong', data: {} });
+    }
+    return;
+  }
+
   if (channel === 'tree' && action === 'list') {
     const d = data as TreeListData;
     treeHandler.list(d.path, d.depth).then(sendReply).catch((err) => sendError('TREE_ERROR', String(err)));
@@ -212,6 +220,7 @@ function handleDirectMessage(
   if (channel === 'chat') {
     if (action === 'message') {
       const d = data as { sessionId: string; message: string };
+      logger.info({ sessionId: d.sessionId, message: d.message?.slice(0, 50) }, '收到 chat 消息（直连通道）');
       if (!cachedProvider) {
         sendError('NO_PROVIDER', 'Provider 未配置');
         return;
@@ -251,7 +260,11 @@ function handleDirectMessage(
         });
       };
 
-      runAgent(request, onStream, deps).catch((err) => {
+      logger.info({ sessionId: d.sessionId }, '开始调用 runAgent');
+      runAgent(request, onStream, deps).then(() => {
+        logger.info({ sessionId: d.sessionId }, 'runAgent 完成');
+      }).catch((err) => {
+        logger.error({ sessionId: d.sessionId, err: String(err) }, 'runAgent 失败');
         directServer?.sendToClient(clientId, {
           channel: 'chat',
           action: 'error',

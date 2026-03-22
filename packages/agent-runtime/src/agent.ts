@@ -212,7 +212,9 @@ export async function runAgent(
       const pendingToolCalls: LLMToolCall[] = [];
       let currentToolCall: { id: string; name: string; inputJson: string } | null = null;
 
+      let eventCount = 0;
       for await (const event of provider.stream(chatParams)) {
+        eventCount++;
         switch (event.type) {
           case 'text_delta':
             assistantContent += event.delta;
@@ -261,6 +263,8 @@ export async function runAgent(
             break;
         }
       }
+
+      console.log(`[Agent] stream finished: ${eventCount} events, stopReason=${stopReason}, contentLen=${assistantContent.length}`);
 
       // CLI 模式：从文本中解析工具调用
       if (!caps.toolUse && assistantContent) {

@@ -1,8 +1,9 @@
 import Docker from 'dockerode';
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { nanoid, generateECDHKeyPair, deriveSharedKey, publicKeyFromBase64, encrypt } from '@ccclaw/shared';
 import { WebSocket } from 'ws';
 import { db, schema } from '../db/index.js';
@@ -227,15 +228,35 @@ export class RunnerManager {
       }) as ChildProcess;
     } else if (hasSrc) {
       // 开发模式：用 tsx 从源码启动
+      // fork 的 env 完全替换 process.env，子进程无法通过模块名解析 tsx
+      // 因此使用 require.resolve 获取绝对路径
+      const esmRequire = createRequire(import.meta.url);
+      const tsxDir = dirname(esmRequire.resolve('tsx'));
+      const loaderPath = join(tsxDir, 'loader.mjs');
+      const preflightPath = join(tsxDir, 'preflight.cjs');
+
       child = fork(srcEntry, ['--mode', 'runner'], {
         cwd: paths.home,
-        execArgv: ['--import', 'tsx'],
+        execArgv: ['--require', preflightPath, '--import', `file://${loaderPath}`],
         env: { ...safeEnv, RUNNER_ID: runnerId, SERVER_URL: serverUrl, AUTH_TOKEN: config.RUNNER_SECRET },
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       }) as ChildProcess;
       logger.info({ slug, runnerId }, '开发模式：使用 tsx 从源码启动 Runner');
     } else {
       throw new Error(`Runner 入口文件不存在: 检查 ${distEntry} 或 ${srcEntry}`);
     }
+
+    // 将子进程输出转发到 server logger
+    child.stdout?.on('data', (data: Buffer) => {
+      for (const line of data.toString().split('\n').filter(Boolean)) {
+        logger.info({ runnerId, src: 'runner:stdout' }, line);
+      }
+    });
+    child.stderr?.on('data', (data: Buffer) => {
+      for (const line of data.toString().split('\n').filter(Boolean)) {
+        logger.info({ runnerId, src: 'runner:stderr' }, line);
+      }
+    });
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call
     (child as any).on('exit', (code: number | null) => {

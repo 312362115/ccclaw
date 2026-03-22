@@ -90,6 +90,7 @@ interface ChatState {
 // ====== Helpers ======
 
 export const EMPTY_MESSAGES: ChatMessage[] = [];
+export const EMPTY_IMAGES: ImageInfo[] = [];
 let msgCounter = 0;
 function nextId() { return `msg-${Date.now()}-${++msgCounter}`; }
 
@@ -194,7 +195,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   getStreamBuffer: (sessionId) => get().streamBufferMap.get(sessionId) ?? '',
   getStreamError: (sessionId) => get().streamErrorMap.get(sessionId) ?? null,
   isPlanMode: (sessionId) => get().planModeMap.get(sessionId) ?? false,
-  getPendingImages: (sessionId) => get().pendingImages.get(sessionId) ?? [],
+  getPendingImages: (sessionId) => get().pendingImages.get(sessionId) ?? EMPTY_IMAGES,
 
   setDirectSend: (fn) => set({ directSend: fn }),
   setCurrentSession: (sessionId) => set({ currentSessionId: sessionId }),

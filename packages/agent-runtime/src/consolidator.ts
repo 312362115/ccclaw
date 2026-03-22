@@ -1,10 +1,14 @@
 /**
- * Consolidator — 滑动窗口上下文整合
+ * Consolidator — 批量上下文整合
  *
- * 1. 滑动窗口：未压缩消息 token > contextWindow * 0.7 时，
- *    压缩 1 个 user turn group（user + 后续 assistant/tool 消息）
- * 2. 硬截断：总 token > contextWindow * 0.9 时，跳过 LLM，直接截断到 log memory
- * 3. Log 记忆合并：log 记忆 > 15 条 OR > 4000 tokens 时，LLM 合并为 1-2 条
+ * 1. 批量压缩：未压缩消息 token > contextWindow * bulkRatio 时，
+ *    一次性压缩到 50% 以下（减少 LLM 调用次数，适配按次计费模型）
+ * 2. 硬截断：总 token > contextWindow * hardRatio 时，跳过 LLM，直接截断到 log memory
+ *
+ * bulkRatio / hardRatio 根据窗口大小对数缩放：
+ *   - 8K 窗口：bulk=70%, hard=80%（小窗口更早触发，留足缓冲）
+ *   - 1M 窗口：bulk=85%, hard=95%（大窗口可以更激进利用空间）
+ * 3. Log 记忆合并：log 记忆 > 20 条 OR > 6000 tokens 时，LLM 合并为 1-2 条
  *
  * contextWindowTokens 应从 Provider capabilities 中获取，自动适配不同模型。
  * 记忆压缩：当 decision + feedback 总 token 超过阈值时，调用 LLM 合并压缩。
@@ -32,10 +36,25 @@ export interface ConsolidatorOptions {
 
 const DEFAULT_CONTEXT_WINDOW = 200_000;
 const DEFAULT_MEMORY_COMPRESS_THRESHOLD = 4_000;
-const SLIDING_TRIGGER_RATIO = 0.7;
-const HARD_TRUNCATE_RATIO = 0.9;
-const LOG_MERGE_COUNT = 15;
-const LOG_MERGE_TOKENS = 4000;
+const BULK_COMPRESS_TARGET_RATIO = 0.5;
+const LOG_MERGE_COUNT = 20;
+const LOG_MERGE_TOKENS = 6000;
+
+// 小窗口 → 大窗口的阈值区间
+const MIN_WINDOW = 8_192;
+const MAX_WINDOW = 1_048_576;
+const HARD_TRUNCATE_RANGE = [0.80, 0.95] as const;   // 8K→80%, 1M→95%
+const BULK_COMPRESS_RANGE = [0.70, 0.85] as const;    // 8K→70%, 1M→85%
+
+/**
+ * 根据上下文窗口大小计算动态阈值比例
+ * 对数缩放：小窗口更保守（更早压缩），大窗口更激进（更晚压缩）
+ */
+export function dynamicRatio(windowTokens: number, range: readonly [number, number]): number {
+  const clamped = Math.max(MIN_WINDOW, Math.min(MAX_WINDOW, windowTokens));
+  const factor = Math.log2(clamped / MIN_WINDOW) / Math.log2(MAX_WINDOW / MIN_WINDOW);
+  return range[0] + factor * (range[1] - range[0]);
+}
 
 // ====== Consolidator ======
 
@@ -72,26 +91,32 @@ export class Consolidator {
       messages.map((m) => ({ role: m.role, content: m.content })),
     );
 
-    // Hard truncation: total token > 80% of context window → skip LLM, direct archive
-    const hardThreshold = this.contextWindowTokens * HARD_TRUNCATE_RATIO;
+    // Hard truncation: total token > dynamic threshold → skip LLM, direct archive
+    const hardRatio = dynamicRatio(this.contextWindowTokens, HARD_TRUNCATE_RANGE);
+    const hardThreshold = this.contextWindowTokens * hardRatio;
     if (estimated > hardThreshold) {
       return this.hardTruncate(messages, sessionId, session.last_consolidated);
     }
 
-    // Sliding window: unconsolidated tokens > 30% of context window → compress 1 turn group
-    const slidingThreshold = this.contextWindowTokens * SLIDING_TRIGGER_RATIO;
-    if (estimated <= slidingThreshold) return false;
+    // Bulk compress: unconsolidated tokens > dynamic threshold → 一次性压缩到 50%
+    const bulkRatio = dynamicRatio(this.contextWindowTokens, BULK_COMPRESS_RANGE);
+    const bulkThreshold = this.contextWindowTokens * bulkRatio;
+    if (estimated <= bulkThreshold) return false;
 
-    // Find first user turn group (user message + following assistant/tool messages)
-    const groupEnd = this.findFirstTurnGroupEnd(messages);
-    if (groupEnd <= 0) return false;
+    // 计算需要压缩多少 token 才能降到目标比例以下
+    const targetTokens = this.contextWindowTokens * BULK_COMPRESS_TARGET_RATIO;
+    const tokensToCompress = estimated - targetTokens;
 
-    const chunk = messages.slice(0, groupEnd);
+    // 找到批量压缩边界（对齐到 turn group 边界）
+    const boundary = this.pickBoundary(messages, tokensToCompress);
+    if (boundary <= 0) return false;
+
+    const chunk = messages.slice(0, boundary);
     const success = await this.consolidateChunk(chunk, sessionId);
 
     if (success) {
       this.db.updateSession(sessionId, {
-        last_consolidated: session.last_consolidated + groupEnd,
+        last_consolidated: session.last_consolidated + boundary,
       });
 
       // After compression, check if log memories need merging
@@ -221,8 +246,8 @@ export class Consolidator {
     sessionId: string,
     lastConsolidated: number,
   ): Promise<boolean> {
-    // 截断到保留 50% 窗口的消息（在滑动窗口阈值之下留缓冲）
-    const targetRemain = this.contextWindowTokens * 0.5;
+    // 截断到保留目标比例的消息（在批量压缩阈值之下留缓冲）
+    const targetRemain = this.contextWindowTokens * BULK_COMPRESS_TARGET_RATIO;
     const estimated = estimateMessagesTokens(
       messages.map((m) => ({ role: m.role, content: m.content })),
     );

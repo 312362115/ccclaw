@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { WorkspaceDB } from './workspace-db.js';
-import { Consolidator } from './consolidator.js';
+import { Consolidator, dynamicRatio } from './consolidator.js';
 import type { ChatResponse } from './llm/types.js';
 
 let db: WorkspaceDB;
@@ -26,6 +26,44 @@ beforeEach(() => {
 afterEach(() => {
   db.close();
   rmSync(tmpDir, { recursive: true, force: true });
+});
+
+describe('dynamicRatio', () => {
+  it('小窗口（8K）返回区间下限', () => {
+    const ratio = dynamicRatio(8_192, [0.70, 0.85]);
+    expect(ratio).toBeCloseTo(0.70, 2);
+  });
+
+  it('大窗口（1M）返回区间上限', () => {
+    const ratio = dynamicRatio(1_048_576, [0.70, 0.85]);
+    expect(ratio).toBeCloseTo(0.85, 2);
+  });
+
+  it('中等窗口（128K）返回中间值', () => {
+    const ratio = dynamicRatio(128_000, [0.80, 0.95]);
+    expect(ratio).toBeGreaterThan(0.80);
+    expect(ratio).toBeLessThan(0.95);
+  });
+
+  it('窗口越大比例越高（单调递增）', () => {
+    const r8k = dynamicRatio(8_192, [0.70, 0.85]);
+    const r32k = dynamicRatio(32_000, [0.70, 0.85]);
+    const r128k = dynamicRatio(128_000, [0.70, 0.85]);
+    const r1m = dynamicRatio(1_048_576, [0.70, 0.85]);
+    expect(r8k).toBeLessThan(r32k);
+    expect(r32k).toBeLessThan(r128k);
+    expect(r128k).toBeLessThan(r1m);
+  });
+
+  it('低于最小窗口时 clamp 到下限', () => {
+    const ratio = dynamicRatio(1_000, [0.70, 0.85]);
+    expect(ratio).toBeCloseTo(0.70, 2);
+  });
+
+  it('超过最大窗口时 clamp 到上限', () => {
+    const ratio = dynamicRatio(10_000_000, [0.70, 0.85]);
+    expect(ratio).toBeCloseTo(0.85, 2);
+  });
 });
 
 describe('Consolidator.findFirstTurnGroupEnd', () => {
@@ -116,7 +154,7 @@ describe('Consolidator.consolidateIfNeeded', () => {
     expect(result).toBe(false);
   });
 
-  it('滑动窗口只压缩 1 个 turn group', async () => {
+  it('批量压缩一次性压缩到目标比例', async () => {
     const llmCalls: string[] = [];
     const trackingLLM = async (params: any): Promise<ChatResponse> => {
       llmCalls.push(params.messages[0].content);
@@ -128,16 +166,16 @@ describe('Consolidator.consolidateIfNeeded', () => {
       };
     };
 
-    // 6 messages × (15 content + 4 overhead) = 114 tokens
-    // contextWindow=160 → sliding = 112 (160*0.7), hard = 144 (160*0.9)
-    // 114 > 112 triggers sliding window, 114 < 144 does NOT trigger hard truncation
+    // 10 messages, each ~15 tokens content + 4 overhead = ~190 tokens total
+    // contextWindow=250, 窗口 < 8K clamp 到最低比例 → bulk=0.70(175), hard=0.80(200)
+    // 190 > 175 triggers bulk compress, 190 < 200 does NOT trigger hard truncation
     const consolidator = new Consolidator(db, trackingLLM, {
-      contextWindowTokens: 160,
+      contextWindowTokens: 250,
     });
 
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
-    // Add 3 turn groups to exceed 70% threshold
-    for (let i = 0; i < 6; i++) {
+    // Add 5 turn groups (10 messages)
+    for (let i = 0; i < 10; i++) {
       db.appendMessage({
         session_id: session.id,
         role: i % 2 === 0 ? 'user' : 'assistant',
@@ -148,15 +186,15 @@ describe('Consolidator.consolidateIfNeeded', () => {
     const result = await consolidator.consolidateIfNeeded(session.id);
     expect(result).toBe(true);
 
-    // LLM should be called once (1 turn group compressed)
+    // LLM should be called exactly once (bulk compress)
     expect(llmCalls.length).toBe(1);
 
-    // lastConsolidated should advance by exactly 1 turn group (2 messages)
+    // lastConsolidated should advance by multiple turn groups (not just 1)
     const updated = db.getSession(session.id);
-    expect(updated!.last_consolidated).toBe(2);
+    expect(updated!.last_consolidated).toBeGreaterThan(2);
   });
 
-  it('硬截断在 80% 阈值触发', async () => {
+  it('硬截断在 95% 阈值触发', async () => {
     const llmCalls: number[] = [];
     const trackingLLM = async (): Promise<ChatResponse> => {
       llmCalls.push(1);
@@ -168,13 +206,13 @@ describe('Consolidator.consolidateIfNeeded', () => {
       };
     };
 
-    // contextWindow=100 → hard threshold = 90 tokens (100 * 0.9)
+    // contextWindow=100 → hard threshold = 95 tokens (100 * 0.95)
     const consolidator = new Consolidator(db, trackingLLM, {
       contextWindowTokens: 100,
     });
 
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
-    // Add enough messages to exceed 90% of 100 tokens
+    // Add enough messages to exceed 95% of 100 tokens
     for (let i = 0; i < 10; i++) {
       db.appendMessage({
         session_id: session.id,
@@ -196,7 +234,7 @@ describe('Consolidator.consolidateIfNeeded', () => {
   });
 
   it('无 LLM 时降级归档', async () => {
-    // contextWindow=100 → sliding threshold = 70 tokens (100 * 0.7)
+    // contextWindow=100 → bulk threshold = 85 tokens (100 * 0.85), hard = 95 (100 * 0.95)
     const consolidator = new Consolidator(db, null, { contextWindowTokens: 100 });
 
     const session = db.createSession({ workspace_id: 'ws-1', user_id: 'u-1' });
@@ -230,21 +268,21 @@ describe('Consolidator.mergeLogMemoriesIfNeeded', () => {
     expect(result).toBe(false);
   });
 
-  it('log 记忆超 15 条触发合并', async () => {
+  it('log 记忆超 20 条触发合并', async () => {
     const consolidator = new Consolidator(db, mockLLM('合并后的总结'), {});
 
-    // Add 16 log memories
-    for (let i = 0; i < 16; i++) {
+    // Add 21 log memories (exceeds LOG_MERGE_COUNT=20)
+    for (let i = 0; i < 21; i++) {
       db.upsertMemory({ name: `log-${i}`, type: 'log', content: `日志内容 ${i}` });
     }
 
     const logsBefore = db.getMemoriesByType('log');
-    expect(logsBefore.length).toBe(16);
+    expect(logsBefore.length).toBe(21);
 
     const result = await consolidator.mergeLogMemoriesIfNeeded();
     expect(result).toBe(true);
 
-    // After merge, should have 1-2 entries instead of 16
+    // After merge, should have 1-2 entries instead of 21
     const logsAfter = db.getMemoriesByType('log');
     expect(logsAfter.length).toBeLessThanOrEqual(2);
     expect(logsAfter[0].content).toBe('合并后的总结');
@@ -253,12 +291,12 @@ describe('Consolidator.mergeLogMemoriesIfNeeded', () => {
   it('log 记忆超 token 阈值触发合并', async () => {
     const consolidator = new Consolidator(db, mockLLM('合并后的总结'));
 
-    // Add a few large log memories exceeding 4000 tokens
+    // Add a few large log memories exceeding 6000 tokens (LOG_MERGE_TOKENS)
     for (let i = 0; i < 5; i++) {
       db.upsertMemory({
         name: `log-${i}`,
         type: 'log',
-        content: '这是一段很长的日志内容'.repeat(200),
+        content: '这是一段很长的日志内容'.repeat(400),
       });
     }
 
@@ -269,7 +307,8 @@ describe('Consolidator.mergeLogMemoriesIfNeeded', () => {
   it('无 LLM 时截断最旧的 log 记忆', async () => {
     const consolidator = new Consolidator(db, null);
 
-    for (let i = 0; i < 20; i++) {
+    // Add 25 log memories (exceeds LOG_MERGE_COUNT=20)
+    for (let i = 0; i < 25; i++) {
       db.upsertMemory({ name: `log-${i}`, type: 'log', content: `日志 ${i}` });
     }
 
@@ -277,7 +316,7 @@ describe('Consolidator.mergeLogMemoriesIfNeeded', () => {
     expect(result).toBe(true);
 
     const logsAfter = db.getMemoriesByType('log');
-    expect(logsAfter.length).toBeLessThanOrEqual(15);
+    expect(logsAfter.length).toBeLessThanOrEqual(20);
   });
 });
 

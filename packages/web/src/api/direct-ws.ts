@@ -121,15 +121,16 @@ export class DirectWsClient {
                 [],
               );
 
-              // Derive shared AES-256-GCM key
+              // Derive shared AES-256-GCM key (SHA-256 over raw ECDH bits, matching server)
               const sharedBits = await crypto.subtle.deriveBits(
                 { name: 'ECDH', public: runnerPubKey },
                 keyPair.privateKey,
                 256,
               );
+              const hashedKey = await crypto.subtle.digest('SHA-256', sharedBits);
               this.aesKey = await crypto.subtle.importKey(
                 'raw',
-                sharedBits,
+                hashedKey,
                 { name: 'AES-GCM', length: 256 },
                 false,
                 ['encrypt', 'decrypt'],
@@ -263,9 +264,10 @@ export class DirectWsClient {
                 keyPair.privateKey,
                 256,
               );
+              const hashedKey2 = await crypto.subtle.digest('SHA-256', sharedBits);
               this.aesKey = await crypto.subtle.importKey(
                 'raw',
-                sharedBits,
+                hashedKey2,
                 { name: 'AES-GCM', length: 256 },
                 false,
                 ['encrypt', 'decrypt'],
