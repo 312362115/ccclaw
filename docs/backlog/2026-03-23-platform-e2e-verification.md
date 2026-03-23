@@ -13,7 +13,7 @@ E2E 通信和 Agent 核心修复完成后，系统性验证剩余平台功能。
 
 ### 第一批：核心能力（P0）
 - [x] 1. **上下文压缩（Consolidator）** — 8 轮长对话连贯性 7/7 ✅ + LLM 回调接通 + 单元测试 25/25
-- [ ] 2. **Terminal** — PTY 打开/输入/输出/关闭，前端通道透传
+- [ ] 2. **Terminal** — PTY 打开/输入/输出/关闭，前端通道透传（已修复 workspaceId→slug bug，node-pty 在子进程中可能有 native 模块加载问题待排查）
 - [ ] 3. **定时任务（Scheduler）** — cron 创建/触发/执行/结果回写
 
 ### 第二批：Agent 高级能力（P1）

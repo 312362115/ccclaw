@@ -276,44 +276,45 @@ export function createWebSocketHandler(server: import('node:http').Server) {
           });
         }
 
-        // 终端消息透传：client → runner
-        if (msg.type === 'terminal_open' && msg.workspaceId && msg.sessionId) {
+        // 终端消息透传：client → runner（需要将 workspaceId 转为 slug）
+        if ((msg.type === 'terminal_open' || msg.type === 'terminal_input' || msg.type === 'terminal_resize' || msg.type === 'terminal_close') && msg.workspaceId && msg.sessionId) {
+          // workspaceId → slug 转换
+          const [termWs] = await db.select({ slug: schema.workspaces.slug })
+            .from(schema.workspaces)
+            .where(eq(schema.workspaces.id, msg.workspaceId))
+            .limit(1);
+          if (!termWs) return;
+          const workspaceSlug = termWs.slug;
           const terminalId = msg.sessionId + '_term';
-          terminalMap.set(terminalId, { workspaceSlug: msg.workspaceId, ws });
-          runnerManager.sendToRunner(msg.workspaceId, {
-            type: 'terminal_open',
-            terminalId,
-            cols: msg.cols ?? 80,
-            rows: msg.rows ?? 24,
-          });
-        }
 
-        if (msg.type === 'terminal_input' && msg.workspaceId && msg.sessionId) {
-          const terminalId = msg.sessionId + '_term';
-          runnerManager.sendToRunner(msg.workspaceId, {
-            type: 'terminal_input',
-            terminalId,
-            data: msg.data,
-          });
-        }
-
-        if (msg.type === 'terminal_resize' && msg.workspaceId && msg.sessionId) {
-          const terminalId = msg.sessionId + '_term';
-          runnerManager.sendToRunner(msg.workspaceId, {
-            type: 'terminal_resize',
-            terminalId,
-            cols: msg.cols,
-            rows: msg.rows,
-          });
-        }
-
-        if (msg.type === 'terminal_close' && msg.workspaceId && msg.sessionId) {
-          const terminalId = msg.sessionId + '_term';
-          runnerManager.sendToRunner(msg.workspaceId, {
-            type: 'terminal_close',
-            terminalId,
-          });
-          terminalMap.delete(terminalId);
+          if (msg.type === 'terminal_open') {
+            terminalMap.set(terminalId, { workspaceSlug, ws });
+            runnerManager.sendToRunner(workspaceSlug, {
+              type: 'terminal_open',
+              terminalId,
+              cols: msg.cols ?? 80,
+              rows: msg.rows ?? 24,
+            });
+          } else if (msg.type === 'terminal_input') {
+            runnerManager.sendToRunner(workspaceSlug, {
+              type: 'terminal_input',
+              terminalId,
+              data: msg.data,
+            });
+          } else if (msg.type === 'terminal_resize') {
+            runnerManager.sendToRunner(workspaceSlug, {
+              type: 'terminal_resize',
+              terminalId,
+              cols: msg.cols,
+              rows: msg.rows,
+            });
+          } else if (msg.type === 'terminal_close') {
+            runnerManager.sendToRunner(workspaceSlug, {
+              type: 'terminal_close',
+              terminalId,
+            });
+            terminalMap.delete(terminalId);
+          }
         }
       } catch (err) {
         logger.error(err, 'WebSocket 消息处理失败');
