@@ -459,10 +459,24 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
       apiBase: cfg.apiBase,
       defaultModel: cfg.model,
     });
-    // 同步 Provider 的上下文窗口到 Consolidator
+    // 同步 Provider 的上下文窗口和 LLM 回调到 Consolidator
     if (sharedDeps?.consolidator) {
       const contextWindow = cachedProvider.capabilities().contextWindow;
       sharedDeps.consolidator.setContextWindow(contextWindow);
+      // 注入 LLM 回调，让 Consolidator 能调用 LLM 做总结/压缩
+      const provider = cachedProvider;
+      sharedDeps.consolidator.setCallLLM(async (params) => {
+        const resp = await provider.chat({
+          model: cfg.model || (provider as any).defaultModel || 'default',
+          messages: [
+            ...(params.systemPrompt ? [{ role: 'system' as const, content: params.systemPrompt }] : []),
+            ...params.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+          ],
+          maxTokens: 2048,
+          temperature: 0.1,
+        });
+        return resp;
+      });
       logger.info({ type: cfg.providerType, model: cfg.model || 'default', contextWindow }, 'Provider 已缓存');
     } else {
       logger.info({ type: cfg.providerType, model: cfg.model || 'default' }, 'Provider 已缓存');

@@ -71,6 +71,11 @@ export class Consolidator {
     this.memoryCompressThreshold = options?.memoryCompressThreshold ?? DEFAULT_MEMORY_COMPRESS_THRESHOLD;
   }
 
+  /** 更新 LLM 回调（Provider 变更时调用） */
+  setCallLLM(callLLM: ConsolidatorLLMCall | null): void {
+    this.callLLM = callLLM;
+  }
+
   /** 更新上下文窗口大小（Provider 变更时调用） */
   setContextWindow(tokens: number): void {
     this.contextWindowTokens = tokens;
