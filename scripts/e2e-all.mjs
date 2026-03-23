@@ -31,6 +31,7 @@ const ALL_TESTS = [
   { id: 'terminal',    name: 'Terminal PTY',            script: 'e2e-terminal-verify.mjs',     quick: true },
   { id: 'scheduler',   name: '定时任务 CRUD',           script: 'e2e-scheduler-verify.mjs',    quick: true },
   { id: 'subagent',    name: 'Sub-agent spawn',        script: 'e2e-subagent-verify.mjs',     quick: false },
+  { id: 'memory',      name: 'Memory 工具',            script: 'e2e-memory-verify.mjs',       quick: false },
   { id: 'consolidator',name: '上下文压缩（长对话）',     script: 'e2e-consolidator-verify.mjs', quick: false },
 ];
 

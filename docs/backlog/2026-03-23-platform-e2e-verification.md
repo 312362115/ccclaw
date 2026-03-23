@@ -18,7 +18,7 @@ E2E 通信和 Agent 核心修复完成后，系统性验证剩余平台功能。
 
 ### 第二批：Agent 高级能力（P1）
 - [x] 4. **Sub-agent（spawn）** — 派生→独立执行（2 轮）→文件创建→结果回传 ✅（修复了 model 硬编码 bug）
-- [ ] 5. **Memory 工具** — agent 创建/搜索 memory、跨 session 持久化
+- [x] 5. **Memory 工具** — write/read/search + 跨 session 持久化 ✅
 - [ ] 6. **Plan 模式** — 只输出计划不执行工具
 
 ### 第三批：平台功能（P2）
