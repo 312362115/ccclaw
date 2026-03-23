@@ -66,7 +66,7 @@ export interface AgentResponse {
 
 export type RunnerMessage =
   | { type: 'ping' }
-  | { type: 'register'; publicKey: string; directUrl: string }
+  | { type: 'register'; directUrl: string }
   | { type: 'response'; requestId: string; data: AgentResponse }
   | { type: 'terminal_output'; terminalId: string; data: string }
   | { type: 'terminal_exit'; terminalId: string; code: number }
@@ -77,7 +77,7 @@ export type RunnerMessage =
 export type ServerMessage =
   | { type: 'registered'; runnerId?: string }
   | { type: 'pong' }
-  | { type: 'config'; data?: RuntimeConfig; encrypted?: string; serverPublicKey?: string }
+  | { type: 'config'; data: RuntimeConfig }
   | { type: 'request'; requestId: string; data: AgentRequest }
   | { type: 'confirm_response'; confirmRequestId: string; approved: boolean }
   | { type: 'terminal_open'; terminalId: string; cols: number; rows: number }

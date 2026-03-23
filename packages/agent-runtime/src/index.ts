@@ -357,7 +357,6 @@ function connect() {
     // Send registration with direct URL
     sendToServer({
       type: 'register',
-      publicKey: '',  // 保留字段兼容性，不再使用
       directUrl: directServer?.directUrl ?? '',
     });
   });

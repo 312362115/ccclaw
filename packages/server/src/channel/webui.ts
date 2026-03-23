@@ -85,10 +85,10 @@ export function createWebSocketHandler(server: import('node:http').Server) {
           }
         }
       }, (msg: { clientId: string; data: string }) => {
-        // Forward tunnel frames from runner back to frontend client
+        // Forward tunnel frames from runner back to frontend client (plain JSON text)
         const clientWs = tunnelClients.get(msg.clientId);
         if (clientWs && clientWs.readyState === WebSocket.OPEN) {
-          clientWs.send(Buffer.from(msg.data, 'base64'));
+          clientWs.send(msg.data);
         }
       });
 
@@ -140,9 +140,9 @@ export function createWebSocketHandler(server: import('node:http').Server) {
 
       logger.info({ clientId, workspaceId, slug: workspace.slug }, 'Tunnel client connected');
 
-      // Forward all client messages to runner as tunnel_frame
+      // Forward all client messages to runner as tunnel_frame (plain JSON text)
       ws.on('message', (raw: Buffer | string) => {
-        const data = Buffer.from(raw as ArrayLike<number>).toString('base64');
+        const data = typeof raw === 'string' ? raw : raw.toString('utf8');
         runnerManager.sendToRunner(workspace.slug, {
           type: 'tunnel_frame',
           clientId,
