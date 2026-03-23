@@ -277,6 +277,9 @@ export function createWebSocketHandler(server: import('node:http').Server) {
         }
 
         // 终端消息透传：client → runner（需要将 workspaceId 转为 slug）
+        if (msg.type?.startsWith('terminal_')) {
+          console.log(`[TERMINAL DEBUG] type=${msg.type} workspaceId=${msg.workspaceId} sessionId=${msg.sessionId}`);
+        }
         if ((msg.type === 'terminal_open' || msg.type === 'terminal_input' || msg.type === 'terminal_resize' || msg.type === 'terminal_close') && msg.workspaceId && msg.sessionId) {
           // workspaceId → slug 转换
           const [termWs] = await db.select({ slug: schema.workspaces.slug })
@@ -289,6 +292,7 @@ export function createWebSocketHandler(server: import('node:http').Server) {
 
           if (msg.type === 'terminal_open') {
             terminalMap.set(terminalId, { workspaceSlug, ws });
+            logger.info({ workspaceSlug, terminalId }, 'terminal_open: 转发到 Runner');
             runnerManager.sendToRunner(workspaceSlug, {
               type: 'terminal_open',
               terminalId,

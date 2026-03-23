@@ -532,7 +532,12 @@ function handleServerMessage(msg: ServerMessage) {
   }
 
   if (msg.type === 'terminal_open') {
-    terminalManager?.open(msg.terminalId, msg.cols, msg.rows);
+    if (!terminalManager) {
+      logger.warn({ terminalId: msg.terminalId }, 'terminal_open: terminalManager 未初始化');
+    } else {
+      const ok = terminalManager.open(msg.terminalId, msg.cols, msg.rows);
+      logger.info({ terminalId: msg.terminalId, ok, active: terminalManager.getActiveCount() }, 'terminal_open 处理完成');
+    }
     return;
   }
   if (msg.type === 'terminal_input') {

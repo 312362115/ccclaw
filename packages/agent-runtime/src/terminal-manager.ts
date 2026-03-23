@@ -29,16 +29,31 @@ export class TerminalManager {
   }
 
   open(terminalId: string, cols = 80, rows = 24): boolean {
-    if (this.sessions.size >= this.maxSessions) return false;
+    if (this.sessions.size >= this.maxSessions) {
+      console.log(`[TerminalManager] open rejected: max sessions ${this.maxSessions} reached`);
+      return false;
+    }
     if (this.sessions.has(terminalId)) return true; // already open
 
-    const pty = spawn(process.env.SHELL || '/bin/bash', [], {
-      name: 'xterm-256color',
-      cols,
-      rows,
-      cwd: this.workspaceDir,
-      env: process.env as Record<string, string>,
-    });
+    let pty;
+    try {
+      const shell = process.env.SHELL || '/bin/bash';
+      pty = spawn(shell, [], {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: this.workspaceDir,
+        env: {
+          ...process.env as Record<string, string>,
+          TERM: 'xterm-256color',
+          SHELL: shell,
+        },
+      });
+      console.log(`[TerminalManager] PTY spawned: pid=${pty.pid}, shell=${process.env.SHELL || '/bin/bash'}, cwd=${this.workspaceDir}`);
+    } catch (err) {
+      console.error(`[TerminalManager] PTY spawn failed:`, err);
+      return false;
+    }
 
     pty.onData((data: string) => {
       this.resetIdle(terminalId);
