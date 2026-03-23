@@ -147,7 +147,7 @@ async function run() {
     pass('直连已建立');
 
     // 5. 获取文件树
-    log('5/8', '获取文件树 (tree.list)...');
+    log('5/10', '获取文件树 (tree.list)...');
     const treeResult = await directRequest(ws, 'tree', 'list', { path: '/', depth: 2 });
     const treeData = treeResult.data;
     if (treeData && treeData.entries !== undefined) {
@@ -162,7 +162,7 @@ async function run() {
     }
 
     // 6. 创建文件
-    log('6/8', '创建文件 (file.create)...');
+    log('6/10', '创建文件 (file.create)...');
     const testFileName = `e2e-test-${Date.now()}.txt`;
     const testContent = `Hello from E2E test at ${new Date().toISOString()}`;
 
@@ -190,7 +190,7 @@ async function run() {
     }
 
     // 7. 读取文件
-    log('7/8', '读取文件 (file.read)...');
+    log('7/10', '读取文件 (file.read)...');
     const readResult = await directRequest(ws, 'file', 'read', { path: testFileName });
     const readContent = readResult.data?.content;
     if (readContent === testContent) {
@@ -201,12 +201,62 @@ async function run() {
       fail('读取文件', JSON.stringify(readResult.data).slice(0, 200));
     }
 
-    // 8. 删除文件
-    log('8/8', '删除文件 (file.delete)...');
-    const deleteEventPromise = waitForTreeEvent(ws, (e) => e.path?.includes(testFileName) && e.type === 'deleted', 5000)
+    // 8. 编辑文件
+    log('8/10', '编辑文件 (file.write)...');
+    const updatedContent = `Updated at ${new Date().toISOString()}`;
+    const writeResult = await directRequest(ws, 'file', 'write', {
+      path: testFileName,
+      content: updatedContent,
+    });
+    if (writeResult.data?.success || writeResult.action === 'write_result') {
+      pass(`文件已更新: size=${writeResult.data?.size}`);
+      // 验证内容
+      const reRead = await directRequest(ws, 'file', 'read', { path: testFileName });
+      if (reRead.data?.content === updatedContent) {
+        pass('编辑后内容一致');
+      } else {
+        fail('编辑后内容', `期望 "${updatedContent.slice(0, 30)}..." 实际 "${String(reRead.data?.content).slice(0, 30)}..."`);
+      }
+    } else {
+      fail('编辑文件', JSON.stringify(writeResult.data).slice(0, 200));
+    }
+
+    // 9. 重命名文件
+    log('9/10', '重命名文件 (file.rename)...');
+    const renamedFileName = `renamed-${testFileName}`;
+    const renameResult = await directRequest(ws, 'file', 'rename', {
+      oldPath: testFileName,
+      newPath: renamedFileName,
+    });
+    if (renameResult.data?.success || renameResult.action === 'rename_result') {
+      pass(`文件已重命名: ${testFileName} → ${renamedFileName}`);
+      // 验证旧路径不存在
+      try {
+        const oldStat = await directRequest(ws, 'file', 'stat', { path: testFileName });
+        if (oldStat.action === 'error') {
+          pass('旧路径已不存在');
+        } else {
+          console.log(`  ${yellow('⚠')} 旧路径仍存在`);
+        }
+      } catch { pass('旧路径已不存在'); }
+      // 验证新路径可读
+      const newRead = await directRequest(ws, 'file', 'read', { path: renamedFileName });
+      if (newRead.data?.content === updatedContent) {
+        pass('重命名后内容一致');
+      } else {
+        fail('重命名后内容', JSON.stringify(newRead.data).slice(0, 100));
+      }
+    } else {
+      fail('重命名文件', JSON.stringify(renameResult.data).slice(0, 200));
+    }
+
+    // 10. 删除文件（用重命名后的名字）
+    log('10/10', '删除文件 (file.delete)...');
+    const fileToDelete = renameResult.data?.success ? renamedFileName : testFileName;
+    const deleteEventPromise = waitForTreeEvent(ws, (e) => e.path?.includes(fileToDelete) && e.type === 'deleted', 5000)
       .catch(() => null);
 
-    const deleteResult = await directRequest(ws, 'file', 'delete', { path: testFileName });
+    const deleteResult = await directRequest(ws, 'file', 'delete', { path: fileToDelete });
     if (deleteResult.data?.ok || deleteResult.action === 'delete_result') {
       pass('文件已删除');
     } else {
@@ -215,7 +265,7 @@ async function run() {
 
     // 确认删除后 stat 应报错
     try {
-      const statResult = await directRequest(ws, 'file', 'stat', { path: testFileName });
+      const statResult = await directRequest(ws, 'file', 'stat', { path: fileToDelete });
       if (statResult.action === 'error') {
         pass('删除确认: stat 返回错误（文件不存在）');
       } else {

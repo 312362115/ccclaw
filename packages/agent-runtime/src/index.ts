@@ -11,7 +11,7 @@ import { DirectServer } from './direct-server.js';
 import { FileWatcher } from './file-watcher.js';
 import { TreeHandler } from './handlers/tree-handler.js';
 import { FileHandler } from './handlers/file-handler.js';
-import type { DirectMessage, TreeListData, FileReadData, FileCreateData, FileDeleteData, FileStatData } from '@ccclaw/shared';
+import type { DirectMessage, TreeListData, FileReadData, FileCreateData, FileWriteData, FileRenameData, FileDeleteData, FileStatData } from '@ccclaw/shared';
 
 // 模块导入
 import { WorkspaceDB } from './workspace-db.js';
@@ -318,6 +318,16 @@ function handleDirectMessage(
     if (action === 'create') {
       const d = data as FileCreateData;
       fileHandler.create(d.path, d.type, d.content).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
+      return;
+    }
+    if (action === 'write') {
+      const d = data as FileWriteData;
+      fileHandler.write(d.path, d.content).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
+      return;
+    }
+    if (action === 'rename') {
+      const d = data as FileRenameData;
+      fileHandler.rename(d.oldPath, d.newPath).then(sendReply).catch((err) => sendError('FILE_ERROR', String(err)));
       return;
     }
     if (action === 'delete') {

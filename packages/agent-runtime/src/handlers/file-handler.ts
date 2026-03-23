@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir, rm, stat as fsStat, access, constants } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, stat as fsStat, access, constants, rename as fsRename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { validatePath, validatePathStrict } from '@ccclaw/shared';
-import type { FileReadResult, FileCreateResult, FileDeleteResult, FileStatResult } from '@ccclaw/shared';
+import type { FileReadResult, FileCreateResult, FileWriteResult, FileRenameResult, FileDeleteResult, FileStatResult } from '@ccclaw/shared';
 
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1 MB
 const BINARY_CHECK_BYTES = 8192;
@@ -73,6 +73,53 @@ export class FileHandler {
     }
 
     return { success: true, path };
+  }
+
+  async write(path: string, content: string): Promise<FileWriteResult> {
+    const resolved = await validatePathStrict(this.workspaceDir, path);
+
+    // 确认文件存在
+    try {
+      const st = await fsStat(resolved);
+      if (st.isDirectory()) {
+        throw new FileError('IS_DIRECTORY', `Cannot write to directory: ${path}`);
+      }
+    } catch (err: any) {
+      if (err instanceof FileError) throw err;
+      if (err.code === 'ENOENT') {
+        throw new FileError('NOT_FOUND', `File not found: ${path}`);
+      }
+      throw new FileError('IO_ERROR', err.message);
+    }
+
+    await writeFile(resolved, content, 'utf-8');
+    const st = await fsStat(resolved);
+    return { success: true, path, size: st.size, mtime: st.mtimeMs };
+  }
+
+  async rename(oldPath: string, newPath: string): Promise<FileRenameResult> {
+    const resolvedOld = await validatePathStrict(this.workspaceDir, oldPath);
+    const resolvedNew = validatePath(this.workspaceDir, newPath);
+
+    // 确认源存在
+    try {
+      await access(resolvedOld, constants.F_OK);
+    } catch {
+      throw new FileError('NOT_FOUND', `Not found: ${oldPath}`);
+    }
+
+    // 确认目标不存在
+    try {
+      await access(resolvedNew, constants.F_OK);
+      throw new FileError('ALREADY_EXISTS', `Already exists: ${newPath}`);
+    } catch (err: any) {
+      if (err instanceof FileError) throw err;
+      if (err.code !== 'ENOENT') throw new FileError('IO_ERROR', err.message);
+    }
+
+    await mkdir(dirname(resolvedNew), { recursive: true });
+    await fsRename(resolvedOld, resolvedNew);
+    return { success: true, oldPath, newPath };
   }
 
   async delete(path: string): Promise<FileDeleteResult> {

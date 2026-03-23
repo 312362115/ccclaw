@@ -38,6 +38,10 @@ export interface FileCreateData { path: string; type: 'file' | 'directory'; cont
 export interface FileCreateResult { success: boolean; path: string; }
 export interface FileDeleteData { path: string; }
 export interface FileDeleteResult { success: boolean; path: string; }
+export interface FileWriteData { path: string; content: string; }
+export interface FileWriteResult { success: boolean; path: string; size: number; mtime: number; }
+export interface FileRenameData { oldPath: string; newPath: string; }
+export interface FileRenameResult { success: boolean; oldPath: string; newPath: string; }
 export interface FileStatData { path: string; }
 export interface FileStatResult { path: string; type: 'file' | 'directory'; size: number; mtime: number; binary: boolean; }
 
