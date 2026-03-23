@@ -29,6 +29,7 @@ const ALL_TESTS = [
   { id: 'tool-call',   name: 'Tool Call 事件流',        script: 'e2e-tool-call-verify.mjs',    quick: true },
   { id: 'confirm',     name: 'Tool Confirm 流程',       script: 'e2e-confirm-verify.mjs',      quick: true },
   { id: 'terminal',    name: 'Terminal PTY',            script: 'e2e-terminal-verify.mjs',     quick: true },
+  { id: 'scheduler',   name: '定时任务 CRUD',           script: 'e2e-scheduler-verify.mjs',    quick: true },
   { id: 'consolidator',name: '上下文压缩（长对话）',     script: 'e2e-consolidator-verify.mjs', quick: false },
 ];
 
