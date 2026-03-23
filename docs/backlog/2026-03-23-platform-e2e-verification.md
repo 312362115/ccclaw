@@ -1,6 +1,6 @@
 ---
 priority: P1
-status: open
+status: done
 spec:
 plan:
 ---
@@ -21,11 +21,11 @@ E2E 通信和 Agent 核心修复完成后，系统性验证剩余平台功能。
 - [x] 5. **Memory 工具** — write/read/search + 跨 session 持久化 ✅
 - [x] 6. **Plan 模式** — /plan 触发 → plan_mode 事件 → 不调用工具 → 输出计划文本 ✅
 
-### 第三批：平台功能（P2）
-- [ ] 7. **Skill 管理** — 技能创建/加载/执行
-- [ ] 8. **Session 管理** — 历史消息读取/会话列表
-- [ ] 9. **Token 刷新** — refresh token 续期
-- [ ] 10. **RBAC 工作区权限** — 跨用户访问隔离
+### 第三批：平台功能（P2）— ✅ 全部通过
+- [x] 7. **Skill 管理** — CRUD 全流程 ✅
+- [x] 8. **Session 管理** — 列表/消息读取/删除 ✅
+- [x] 9. **Token 刷新** — 刷新成功 + 旧 token 失效 ✅
+- [x] 10. **RBAC 工作区权限** — 无 token 401 / 伪造 401 / 无权限 403 ✅
 
 ## 已完成的验证（2026-03-23）
 - ✅ 通信三路径（RELAY / 直连 / Tunnel）

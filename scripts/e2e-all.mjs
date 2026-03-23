@@ -33,6 +33,7 @@ const ALL_TESTS = [
   { id: 'subagent',    name: 'Sub-agent spawn',        script: 'e2e-subagent-verify.mjs',     quick: false },
   { id: 'memory',      name: 'Memory 工具',            script: 'e2e-memory-verify.mjs',       quick: false },
   { id: 'plan-mode',   name: 'Plan 模式',              script: 'e2e-plan-mode-verify.mjs',    quick: false },
+  { id: 'platform-api',name: '平台 API（Skill/Session/Token/RBAC）', script: 'e2e-platform-api-verify.mjs', quick: true },
   { id: 'consolidator',name: '上下文压缩（长对话）',     script: 'e2e-consolidator-verify.mjs', quick: false },
 ];
 
