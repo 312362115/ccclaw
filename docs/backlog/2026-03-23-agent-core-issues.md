@@ -1,6 +1,6 @@
 ---
 priority: P0
-status: open
+status: done
 spec:
 plan:
 ---
@@ -18,11 +18,8 @@ E2E 验证发现的 Agent 运行时问题，阻塞核心对话能力。
 ### 2. ~~Agent 循环无最大迭代限制~~（P0）✅ 已修复
 - **修复**：DEFAULT_MAX_ITERATIONS 50→25 + 连续工具失败 3 次自动终止（MAX_CONSECUTIVE_TOOL_ERRORS）
 
-### 3. Tool 确认流程（confirm_request）未接通（P1）
-- **现象**：ToolGuard 检测到危险操作时 confirmCallback 为空，直接放行
-- **影响**：`git push --force`、`rm -rf`、`DROP TABLE` 等危险操作不弹确认
-- **修复**：
-  - 直连 chat handler 中注册 confirmCallback
-  - callback 通过 directServer 发 confirm_request 事件到前端
-  - 等待前端 confirm_response 返回 Promise<boolean>
-  - RELAY 路径同理（通过 messageBus）
+### 3. ~~Tool 确认流程（confirm_request）未接通~~（P1）✅ 已修复
+- **修复**：直连和 RELAY 两条路径均注册 confirmCallback
+  - 直连：通过 directServer.sendToClient 发 confirm_request，waitForConfirm 等待回复
+  - RELAY：通过 sendResponse 发 confirm_request，waitForConfirm 等待 Server 转发的 confirm_response
+- **验证**：拒绝 rm -r（返回"用户拒绝"）、批准读 .env（成功读取内容）均通过

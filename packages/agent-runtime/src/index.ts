@@ -274,6 +274,26 @@ function handleDirectMessage(
         }
       }
 
+      // 注册 confirm 回调：发 confirm_request 到前端，等待 confirm_response
+      if (deps) {
+        deps.toolRegistry.setConfirmCallback(async (toolName, input, reason) => {
+          const confirmId = `confirm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          directServer?.sendToClient(clientId, {
+            channel: 'chat',
+            action: 'confirm_request',
+            requestId,
+            data: {
+              sessionId: d.sessionId,
+              requestId: confirmId,
+              tool: toolName,
+              input,
+              reason,
+            },
+          });
+          return waitForConfirm(confirmId);
+        });
+      }
+
       const onStream = (event: AgentResponse) => {
         directServer?.sendToClient(clientId, {
           channel: 'chat',
@@ -556,6 +576,21 @@ async function handleRequest(requestId: string, request: import('./protocol.js')
     if (!deps.toolRegistry.getTool('spawn')) {
       deps.toolRegistry.register(spawnTool);
     }
+  }
+
+  // 注册 confirm 回调（RELAY 路径：通过 Server WebSocket 转发）
+  if (deps) {
+    deps.toolRegistry.setConfirmCallback(async (toolName, input, reason) => {
+      const confirmId = `confirm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      sendResponse(requestId, {
+        type: 'confirm_request',
+        requestId: confirmId,
+        tool: toolName,
+        input,
+        reason,
+      });
+      return waitForConfirm(confirmId);
+    });
   }
 
   await runAgent(request, onStream, deps);
