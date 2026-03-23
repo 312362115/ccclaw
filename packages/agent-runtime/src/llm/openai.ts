@@ -437,6 +437,14 @@ export class OpenAIAdapter implements LLMProvider {
                     toolCallId: tc.id,
                     name: tc.function.name,
                   };
+                  // 部分 Provider（如 Gemini via litellm）在第一个 chunk 就包含完整 arguments
+                  if (tc.function.arguments) {
+                    yield {
+                      type: 'tool_use_delta',
+                      toolCallId: tc.id,
+                      delta: tc.function.arguments,
+                    };
+                  }
                 } else if (tc.function?.arguments) {
                   // Subsequent chunk — emit tool_use_delta
                   const state = toolCallStates.get(idx);

@@ -46,7 +46,8 @@ export interface AgentDeps {
 
 // ====== Constants ======
 
-const DEFAULT_MAX_ITERATIONS = 50;
+const DEFAULT_MAX_ITERATIONS = 25;
+const MAX_CONSECUTIVE_TOOL_ERRORS = 3;
 
 const PLAN_MODE_SUFFIX = `
 
@@ -148,6 +149,7 @@ export async function runAgent(
 
     // 6. Agent 迭代循环
     let iteration = 0;
+    let consecutiveToolErrors = 0;
     const history: LLMMessage[] = ctx.messages.map((m, i, arr) => {
       // 对最后一条 user 消息注入多模态内容（如果有）
       if (multimodalContent && i === arr.length - 1 && m.role === 'user') {
@@ -295,11 +297,15 @@ export async function runAgent(
           toolCalls: pendingToolCalls,
         });
 
+        let allErrorsThisRound = true;
         for (const tc of pendingToolCalls) {
           const result = await toolRegistry.execute(
             tc.name,
             tc.input as Record<string, unknown>,
           );
+
+          const isError = typeof result === 'string' && result.startsWith('Error:');
+          if (!isError) allErrorsThisRound = false;
 
           onStream({ type: 'tool_result', toolCallId: tc.id, output: result });
 
@@ -316,6 +322,17 @@ export async function runAgent(
             content: result,
             tool_calls: JSON.stringify({ id: tc.id, name: tc.name }),
           });
+        }
+
+        // 连续工具失败检测
+        if (allErrorsThisRound) {
+          consecutiveToolErrors++;
+          if (consecutiveToolErrors >= MAX_CONSECUTIVE_TOOL_ERRORS) {
+            onStream({ type: 'error', message: `工具连续失败 ${consecutiveToolErrors} 次，终止执行` });
+            break;
+          }
+        } else {
+          consecutiveToolErrors = 0;
         }
         // 继续循环
       } else {
