@@ -106,7 +106,7 @@ export class SubagentManager {
       iteration++;
 
       const response = await this.provider.chat({
-        model: 'claude-sonnet-4-20250514',
+        model: (this.provider as any).defaultModel || 'claude-sonnet-4-20250514',
         systemPrompt,
         messages,
         tools: llmTools.length > 0 ? llmTools : undefined,
