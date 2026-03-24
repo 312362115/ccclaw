@@ -41,7 +41,7 @@ describe('file-tree store', () => {
       ], false);
 
       useFileTreeStore.getState().applyEvents([
-        { type: 'created', path: 'index.ts', entryType: 'file', size: 50, mtime: '2026-01-01' },
+        { type: 'created', path: 'index.ts', entryType: 'file', size: 50, mtime: 1735689600000 },
       ]);
 
       const entries = useFileTreeStore.getState().entries;
@@ -55,7 +55,7 @@ describe('file-tree store', () => {
       ], false);
 
       useFileTreeStore.getState().applyEvents([
-        { type: 'created', path: 'src/app.ts', entryType: 'file', size: 100, mtime: '2026-01-01' },
+        { type: 'created', path: 'src/app.ts', entryType: 'file', size: 100, mtime: 1735689600000 },
       ]);
 
       const src = useFileTreeStore.getState().entries.find((e) => e.name === 'src');
@@ -79,11 +79,11 @@ describe('file-tree store', () => {
 
     it('should update file metadata', () => {
       useFileTreeStore.getState().setEntries([
-        { name: 'file.ts', type: 'file', size: 10, mtime: '2026-01-01' },
+        { name: 'file.ts', type: 'file', size: 10, mtime: 1735689600000 },
       ], false);
 
       useFileTreeStore.getState().applyEvents([
-        { type: 'modified', path: 'file.ts', entryType: 'file', size: 200, mtime: '2026-01-02' },
+        { type: 'modified', path: 'file.ts', entryType: 'file', size: 200, mtime: 1735776000000 },
       ]);
 
       expect(useFileTreeStore.getState().entries[0].size).toBe(200);

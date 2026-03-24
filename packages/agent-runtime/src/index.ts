@@ -453,10 +453,16 @@ let cachedUserPreferences: { customInstructions?: string; toolConfirmMode?: stri
 
 function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
   try {
+    // Docker 容器内 127.0.0.1/localhost 指向容器自身，需替换为宿主机地址
+    let apiBase = cfg.apiBase;
+    if (apiBase && process.env.DIRECT_SERVER_ADVERTISE_HOST === 'host.docker.internal') {
+      apiBase = apiBase.replace(/\/\/(127\.0\.0\.1|localhost)([:\/])/g, '//host.docker.internal$2');
+    }
+
     cachedProvider = LLMProviderFactory.create({
       type: cfg.providerType || 'claude',
       apiKey: cfg.apiKey,
-      apiBase: cfg.apiBase,
+      apiBase,
       defaultModel: cfg.model,
     });
     // 同步 Provider 的上下文窗口和 LLM 回调到 Consolidator

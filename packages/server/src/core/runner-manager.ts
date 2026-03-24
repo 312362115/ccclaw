@@ -188,6 +188,7 @@ export class RunnerManager {
         `RUNNER_ID=${runnerId}`,
         `SERVER_URL=${serverUrl}`,
         `AUTH_TOKEN=${config.RUNNER_SECRET}`,
+        `JWT_SECRET=${config.JWT_SECRET}`,
         `WORKSPACE_DIR=/workspace`,
         `INTERNAL_DIR=/internal`,
         `WORKSPACE_DB=/internal/workspace.db`,
