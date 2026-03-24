@@ -81,23 +81,23 @@ workspacesRouter.delete('/:id', requireWorkspaceAccess(), async (c) => {
     .where(eq(schema.workspaces.id, id)).limit(1);
   if (!ws) return c.json({ error: '工作区不存在' }, 404);
 
-  // 1. 停 Runner（Docker 容器 / Local 子进程 / 解绑）
-  try {
-    await runnerManager.stop(ws.slug);
-  } catch (err) {
-    logger.warn({ err, slug: ws.slug }, '停止 Runner 失败，继续删除');
-  }
-
-  // 2. 删数据库记录（级联删除关联表）
+  // 1. 删数据库记录（级联删除关联表）— 同步，确保前端立即看到删除
   await db.delete(schema.workspaces).where(eq(schema.workspaces.id, id));
-
-  // 3. 清磁盘文件
-  try {
-    await removeWorkspaceStorage(ws.slug);
-  } catch (err) {
-    logger.warn({ err, slug: ws.slug }, '清理工作区文件失败');
-  }
-
   await audit(c, 'workspace.delete', id);
+
+  // 2. 后台异步清理：停 Runner + 清磁盘（不阻塞响应）
+  const { slug } = ws;
+  Promise.resolve().then(async () => {
+    try { await runnerManager.stop(slug); } catch (err) {
+      logger.warn({ err, slug }, '停止 Runner 失败');
+    }
+    try { await removeWorkspaceStorage(slug); } catch (err) {
+      logger.warn({ err, slug }, '清理工作区文件失败');
+    }
+    logger.info({ slug }, '工作区资源清理完成');
+  }).catch((err) => {
+    logger.error({ err, slug }, '工作区资源清理异常');
+  });
+
   return c.json({ ok: true });
 });
