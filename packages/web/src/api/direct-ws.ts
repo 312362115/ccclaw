@@ -52,12 +52,21 @@ export class DirectWsClient {
       info = await api<RunnerInfo>('/workspaces/' + this.workspaceId + '/runner-info');
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
-        console.warn('[DirectWs] Runner not online (404), falling back to RELAY');
+        console.log('[DirectWs] Runner not online, triggering ensure-config to start runner...');
+        try {
+          await api('/workspaces/' + this.workspaceId + '/ensure-config', { method: 'POST' });
+          // Runner 启动后重试获取 runner-info
+          info = await api<RunnerInfo>('/workspaces/' + this.workspaceId + '/runner-info');
+        } catch {
+          console.warn('[DirectWs] Runner failed to start, falling back to RELAY');
+          this.fallbackToRelay();
+          return;
+        }
       } else {
         console.warn('[DirectWs] Failed to fetch runner-info, falling back to RELAY', err);
+        this.fallbackToRelay();
+        return;
       }
-      this.fallbackToRelay();
-      return;
     }
 
     // 2. 尝试直连
