@@ -8,10 +8,10 @@ import { db, schema } from '../db/index.js';
 import { eq } from 'drizzle-orm';
 import type { AppEnv } from '../types.js';
 
-function openWorkspaceDb(slug: string): Database.Database | null {
+function openWorkspaceDb(slug: string, writable = false): Database.Database | null {
   const dbPath = join(config.DATA_DIR, 'workspaces', slug, 'internal', 'workspace.db');
   try {
-    return new Database(dbPath, { readonly: true });
+    return new Database(dbPath, writable ? {} : { readonly: true });
   } catch {
     return null;
   }
@@ -41,7 +41,7 @@ sessionsRouter.get('/:id/sessions', requireWorkspaceAccess(), async (c) => {
 
   try {
     const sessions = wdb.prepare(
-      'SELECT id, title, status, created_at FROM sessions ORDER BY created_at DESC LIMIT 50',
+      "SELECT id, title, status, created_at FROM sessions WHERE status = 'active' ORDER BY created_at DESC LIMIT 50",
     ).all();
     return c.json(sessions);
   } finally {
@@ -73,6 +73,35 @@ sessionsRouter.get('/:id/sessions/:sid/messages', requireWorkspaceAccess(), asyn
 // POST /api/workspaces/:id/sessions — 创建会话
 sessionsRouter.post('/:id/sessions', requireWorkspaceAccess(), async (c) => {
   return c.json({ error: '会话由 Runner 自动创建' }, 501);
+});
+
+// PATCH /api/workspaces/:id/sessions/:sid — 更新会话（归档等）
+sessionsRouter.patch('/:id/sessions/:sid', requireWorkspaceAccess(), async (c) => {
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: '缺少工作区 ID' }, 400);
+  const slug = await getSlug(id);
+  if (!slug) return c.json({ error: '工作区不存在' }, 404);
+
+  const sid = c.req.param('sid');
+  const body = await c.req.json() as { status?: string; title?: string };
+
+  const wdb = openWorkspaceDb(slug, true);
+  if (!wdb) return c.json({ error: '工作区数据库不可用' }, 500);
+
+  try {
+    const updates: string[] = [];
+    const params: unknown[] = [];
+    if (body.status) { updates.push('status = ?'); params.push(body.status); }
+    if (body.title) { updates.push('title = ?'); params.push(body.title); }
+    if (updates.length === 0) return c.json({ error: '无更新字段' }, 400);
+
+    params.push(sid);
+    const result = wdb.prepare(`UPDATE sessions SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    if (result.changes === 0) return c.json({ error: '会话不存在' }, 404);
+    return c.json({ ok: true });
+  } finally {
+    wdb.close();
+  }
 });
 
 // DELETE /api/workspaces/:id/sessions/:sid

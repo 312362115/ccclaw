@@ -2,11 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { PlusIcon } from './icons';
 
+interface Provider {
+  id: string;
+  name: string;
+  type: string;
+  isDefault: boolean;
+}
+
 interface Workspace {
   id: string;
   name: string;
   slug: string;
-  settings?: { startMode?: 'local' | 'docker' | 'remote'; [key: string]: unknown };
+  settings?: { startMode?: 'local' | 'docker' | 'remote'; providerId?: string; model?: string; [key: string]: unknown };
 }
 
 const MODE_LABELS: Record<string, string> = { local: 'Local', docker: 'Docker', remote: 'Remote' };
@@ -26,6 +33,11 @@ export function WorkspaceSwitcher({ workspaces, currentId, onSelect, onClose }: 
   const [mode, setMode] = useState<'local' | 'docker' | 'remote'>('local');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [providerId, setProviderId] = useState('');
+  const [modelList, setModelList] = useState<string[]>([]);
+  const [model, setModel] = useState('');
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -35,15 +47,51 @@ export function WorkspaceSwitcher({ workspaces, currentId, onSelect, onClose }: 
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
+  // 进入创建模式时加载 providers
+  useEffect(() => {
+    if (!creating) return;
+    api<Provider[]>('/providers').then((list) => {
+      setProviders(list);
+      // 自动选中默认 provider 或第一个
+      const def = list.find((p) => p.isDefault) || list[0];
+      if (def) {
+        setProviderId(def.id);
+        loadModels(def.id);
+      }
+    }).catch(() => {});
+  }, [creating]);
+
+  const loadModels = async (pid: string) => {
+    if (!pid) { setModelList([]); return; }
+    setModelsLoading(true);
+    try {
+      const data = await api<{ models: string[] }>(`/providers/${pid}/models`);
+      setModelList(data.models || []);
+      setModel(data.models?.[0] || '');
+    } catch {
+      setModelList([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  };
+
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    if (!providerId) { setError('请选择 Provider'); return; }
     setSaving(true);
     setError('');
     try {
       const ws = await api<Workspace>('/workspaces', {
         method: 'POST',
-        body: JSON.stringify({ name: trimmed, settings: { startMode: mode } }),
+        body: JSON.stringify({
+          name: trimmed,
+          settings: {
+            startMode: mode,
+            providerId,
+            ...(model ? { model } : {}),
+          },
+        }),
       });
       onSelect(ws);
       onClose();
@@ -53,6 +101,17 @@ export function WorkspaceSwitcher({ workspaces, currentId, onSelect, onClose }: 
       setSaving(false);
     }
   };
+
+  const resetForm = () => {
+    setCreating(false);
+    setName('');
+    setMode('local');
+    setProviderId('');
+    setModel('');
+    setModelList([]);
+    setError('');
+  };
+
 
   return (
     <div
@@ -94,7 +153,7 @@ export function WorkspaceSwitcher({ workspaces, currentId, onSelect, onClose }: 
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreate();
-                if (e.key === 'Escape') { setCreating(false); setName(''); setMode('local'); setError(''); }
+                if (e.key === 'Escape') resetForm();
               }}
               placeholder="工作区名称"
               className="w-full h-8 border border-line rounded-lg px-2.5 text-[13px] outline-none focus:border-blue-400 transition-colors mb-2"
@@ -115,17 +174,44 @@ export function WorkspaceSwitcher({ workspaces, currentId, onSelect, onClose }: 
                 </button>
               ))}
             </div>
+            {/* Provider 选择 */}
+            <select
+              value={providerId}
+              onChange={(e) => {
+                setProviderId(e.target.value);
+                loadModels(e.target.value);
+              }}
+              className="w-full h-8 border border-line rounded-lg px-2 text-[13px] outline-none focus:border-blue-400 transition-colors mb-2 bg-white"
+            >
+              <option value="">选择 Provider *</option>
+              {providers.map((p) => (
+                <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+              ))}
+            </select>
+            {/* Model 选择 */}
+            {modelList.length > 0 && (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full h-8 border border-line rounded-lg px-2 text-[13px] outline-none focus:border-blue-400 transition-colors mb-2 bg-white"
+              >
+                {modelList.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+            )}
+            {modelsLoading && <div className="text-[10px] text-text-muted mb-1">加载模型中...</div>}
             {error && <div className="text-[11px] text-red-500 mb-1.5">{error}</div>}
             <div className="flex gap-1.5">
               <button
                 onClick={handleCreate}
-                disabled={saving || !name.trim()}
+                disabled={saving || !name.trim() || !providerId}
                 className="flex-1 h-7 bg-blue-500 text-white text-[12px] font-medium rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50"
               >
                 {saving ? '创建中...' : '创建'}
               </button>
               <button
-                onClick={() => { setCreating(false); setName(''); setMode('local'); setError(''); }}
+                onClick={resetForm}
                 className="h-7 px-3 text-[12px] border border-line rounded-md hover:bg-slate-50 transition-colors"
               >
                 取消

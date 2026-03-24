@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { TerminalIcon, FileIcon } from '../../components/icons';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   filePreviewOpen: boolean;
   onToggleTerminal: () => void;
   onToggleFilePreview: () => void;
+  onTitleChange?: (title: string) => void;
 }
 
 const dotConfig = {
@@ -39,14 +41,48 @@ function StatusDot({ status }: { status: Props['aiStatus'] }) {
   );
 }
 
-export function ChatHeader({ title, aiStatus, planMode, terminalOpen, filePreviewOpen, onToggleTerminal, onToggleFilePreview }: Props) {
+export function ChatHeader({ title, aiStatus, planMode, terminalOpen, filePreviewOpen, onToggleTerminal, onToggleFilePreview, onTitleChange }: Props) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState('');
+
+  const startEdit = () => {
+    setEditValue(title);
+    setEditing(true);
+  };
+
+  const commitEdit = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== title && onTitleChange) {
+      onTitleChange(trimmed);
+    }
+    setEditing(false);
+  };
+
   return (
     <div className="flex items-center justify-between px-5 border-b border-line-soft gap-3 min-h-14">
       {/* 左：标题 + 状态点 + Plan 徽章 */}
       <div className="flex items-center gap-2 min-w-0 flex-1">
-        <h3 className="text-[15px] font-bold whitespace-nowrap overflow-hidden text-ellipsis">
-          {title}
-        </h3>
+        {editing ? (
+          <input
+            autoFocus
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Escape') setEditing(false);
+            }}
+            onBlur={commitEdit}
+            className="text-[15px] font-bold border border-line rounded px-1.5 py-0.5 outline-none focus:border-blue-400 min-w-0 flex-1"
+          />
+        ) : (
+          <h3
+            className="text-[15px] font-bold whitespace-nowrap overflow-hidden text-ellipsis cursor-default"
+            onDoubleClick={onTitleChange ? startEdit : undefined}
+            title={onTitleChange ? '双击编辑会话名称' : undefined}
+          >
+            {title}
+          </h3>
+        )}
         <StatusDot status={aiStatus} />
         {planMode && (
           <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full shrink-0">

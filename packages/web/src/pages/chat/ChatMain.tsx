@@ -13,6 +13,7 @@ interface Props {
   filePreviewOpen: boolean;
   onToggleTerminal: () => void;
   onToggleFilePreview: () => void;
+  onSessionTitleChange?: (title: string) => void;
 }
 
 export function ChatMain({
@@ -23,6 +24,7 @@ export function ChatMain({
   filePreviewOpen,
   onToggleTerminal,
   onToggleFilePreview,
+  onSessionTitleChange,
 }: Props) {
   const messages = useChatStore((s) => s.messages.get(sessionId) || EMPTY_MESSAGES);
   const streaming = useChatStore((s) => s.isStreaming(sessionId));
@@ -64,6 +66,7 @@ export function ChatMain({
         filePreviewOpen={filePreviewOpen}
         onToggleTerminal={onToggleTerminal}
         onToggleFilePreview={onToggleFilePreview}
+        onTitleChange={onSessionTitleChange}
       />
 
       <div className="flex-1 min-h-0 flex flex-col">

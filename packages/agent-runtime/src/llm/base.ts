@@ -91,7 +91,8 @@ export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
  * - Other messages pass through unchanged
  */
 export function sanitizeMessages(messages: LLMMessage[]): LLMMessage[] {
-  return messages.map((msg) => {
+  // Step 1: Fix empty content in assistant messages
+  const fixed = messages.map((msg) => {
     if (msg.role !== 'assistant') {
       return msg;
     }
@@ -111,6 +112,24 @@ export function sanitizeMessages(messages: LLMMessage[]): LLMMessage[] {
     // Assistant without tool calls: replace empty with placeholder
     return { ...msg, content: '(empty)' };
   });
+
+  // Step 2: Remove orphan tool messages (tool messages not preceded by assistant with tool_calls)
+  // This prevents API errors like "messages with role tool must be a response to a preceding message with tool_calls"
+  const result: LLMMessage[] = [];
+  for (let i = 0; i < fixed.length; i++) {
+    const msg = fixed[i];
+    if (msg.role === 'tool') {
+      // Check if previous message in result is an assistant with tool_calls
+      const prev = result[result.length - 1];
+      if (!prev || prev.role !== 'assistant' || !prev.toolCalls || prev.toolCalls.length === 0) {
+        // Orphan tool message — skip it
+        continue;
+      }
+    }
+    result.push(msg);
+  }
+
+  return result;
 }
 
 // ====== Image Content Stripping ======

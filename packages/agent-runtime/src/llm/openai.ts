@@ -382,6 +382,7 @@ export class OpenAIAdapter implements LLMProvider {
             choices?: Array<{
               delta?: {
                 content?: string | null;
+                reasoning_content?: string | null;
                 tool_calls?: Array<{
                   index: number;
                   id?: string;
@@ -396,6 +397,14 @@ export class OpenAIAdapter implements LLMProvider {
           try {
             chunk = JSON.parse(data);
           } catch {
+            continue;
+          }
+
+          // Handle API error returned inside SSE stream
+          if ((chunk as any).error) {
+            const errMsg = (chunk as any).error.message || JSON.stringify((chunk as any).error);
+            console.error(`[OpenAI SSE] API error in stream: ${errMsg}`);
+            yield { type: 'error', error: errMsg };
             continue;
           }
 
@@ -415,6 +424,11 @@ export class OpenAIAdapter implements LLMProvider {
 
             const delta = choice.delta;
             if (!delta) continue;
+
+            // Reasoning/thinking delta (Qwen3, DeepSeek etc.)
+            if (delta.reasoning_content) {
+              yield { type: 'thinking_delta', delta: delta.reasoning_content };
+            }
 
             // Text delta
             if (delta.content) {

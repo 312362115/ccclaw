@@ -87,6 +87,17 @@ export function Workspaces() {
   };
 
   const selectedProvider = providers.find((p) => p.id === settingsProviderId);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api(`/workspaces/${id}`, { method: 'DELETE' });
+      setDeleteConfirmId(null);
+      load();
+    } catch {
+      // 静默处理
+    }
+  };
 
   return (
     <ContentPageShell>
@@ -140,7 +151,10 @@ export function Workspaces() {
                     </td>
                     <td className="px-3 py-2.5 text-sm text-text-muted">{ws.gitRepo || '-'}</td>
                     <td className="px-3 py-2.5">
-                      <button onClick={() => openSettings(ws)} className="text-accent text-[13px] hover:underline">设置</button>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => openSettings(ws)} className="text-accent text-[13px] hover:underline">设置</button>
+                        <button onClick={() => setDeleteConfirmId(ws.id)} className="text-red-400 text-[13px] hover:text-red-600 hover:underline transition-colors">删除</button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -148,6 +162,17 @@ export function Workspaces() {
             </tbody>
           </table>
         </div>
+
+        {/* 删除确认弹窗 */}
+        <Modal open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} title="删除工作区" width="max-w-sm">
+          <p className="text-sm text-text-primary mb-4">
+            确认删除工作区「<strong>{list.find((w) => w.id === deleteConfirmId)?.name}</strong>」？此操作不可恢复。
+          </p>
+          <div className="flex gap-2">
+            <Button onClick={() => handleDelete(deleteConfirmId!)} className="bg-red-500 hover:bg-red-600 text-white">删除</Button>
+            <Button variant="ghost" onClick={() => setDeleteConfirmId(null)}>取消</Button>
+          </div>
+        </Modal>
 
         <Modal open={!!editingId} onClose={() => setEditingId(null)} title="工作区模型设置" width="max-w-md">
           <div className="mb-3">

@@ -53,10 +53,20 @@ export function ChatPage() {
 
       if (target) {
         setCurrentWorkspace(target);
-        const sid = `session-${target.slug}`;
-        setCurrentSessionId(sid);
-        setStoreSession(sid);
-        loadMessages(target.id, sid);
+        // 从 API 加载最近的会话，用第一个；没有则用默认 ID
+        api<Array<{ id: string }>>(`/workspaces/${target.id}/sessions`)
+          .then((sessions) => {
+            const sid = sessions.length > 0 ? sessions[0].id : `session-${target.slug}`;
+            setCurrentSessionId(sid);
+            setStoreSession(sid);
+            loadMessages(target.id, sid);
+          })
+          .catch(() => {
+            const sid = `session-${target.slug}`;
+            setCurrentSessionId(sid);
+            setStoreSession(sid);
+            loadMessages(target.id, sid);
+          });
       }
     }).catch(() => {});
   }, [urlWorkspaceId]);
@@ -64,10 +74,19 @@ export function ChatPage() {
   const handleSelectWorkspace = (ws: Workspace) => {
     setCurrentWorkspace(ws);
     localStorage.setItem('cc-last-workspace', ws.id);
-    const sessionId = `session-${ws.slug}`;
-    setCurrentSessionId(sessionId);
-    setStoreSession(sessionId);
-    loadMessages(ws.id, sessionId);
+    api<Array<{ id: string }>>(`/workspaces/${ws.id}/sessions`)
+      .then((sessions) => {
+        const sessionId = sessions.length > 0 ? sessions[0].id : `session-${ws.slug}`;
+        setCurrentSessionId(sessionId);
+        setStoreSession(sessionId);
+        loadMessages(ws.id, sessionId);
+      })
+      .catch(() => {
+        const sessionId = `session-${ws.slug}`;
+        setCurrentSessionId(sessionId);
+        setStoreSession(sessionId);
+        loadMessages(ws.id, sessionId);
+      });
   };
 
   const handleSelectSession = (workspaceId: string, sessionId: string) => {
@@ -77,7 +96,7 @@ export function ChatPage() {
   };
 
   const filePreviewOpen = previewPath !== null;
-  const sessionTitle = currentWorkspace?.name || '新会话';
+  const [sessionTitle, setSessionTitle] = useState('新会话');
 
   return (
     <div className="flex h-full">
@@ -88,6 +107,7 @@ export function ChatPage() {
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
         onSendDirectMessage={sendDirectMessage}
+        onSessionTitleChange={setSessionTitle}
       />
 
       {/* 主区域 */}
@@ -105,6 +125,14 @@ export function ChatPage() {
                 if (filePreviewOpen) {
                   useFileTreeStore.getState().setPreview(null, null, false);
                 }
+              }}
+              onSessionTitleChange={(title) => {
+                setSessionTitle(title);
+                // 持久化到后端
+                api(`/workspaces/${currentWorkspace.id}/sessions/${currentSessionId}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({ title }),
+                }).catch(() => {});
               }}
             />
             <FilePreviewPanel />

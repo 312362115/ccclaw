@@ -34,13 +34,13 @@ export function useDirectConnection(workspaceId: string | null) {
 
         // ── Tree events ──
         if (msg.channel === 'tree') {
-          if (msg.action === 'snapshot') {
+          if (msg.action === 'snapshot' || msg.action === 'list_result') {
             if (msg.data.path === '/') {
               s.setEntries(msg.data.entries, msg.data.truncated);
             } else {
               s.mergeSubtree(msg.data.path, msg.data.entries);
             }
-          } else if (msg.action === 'event') {
+          } else if (msg.action === 'event' || msg.action === 'events') {
             s.applyEvents(msg.data.events);
           }
         }
