@@ -468,10 +468,8 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
       sharedDeps.consolidator.setCallLLM(async (params) => {
         const resp = await provider.chat({
           model: cfg.model || (provider as any).defaultModel || 'default',
-          messages: [
-            ...(params.systemPrompt ? [{ role: 'system' as const, content: params.systemPrompt }] : []),
-            ...params.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-          ],
+          systemPrompt: params.systemPrompt,
+          messages: params.messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
           maxTokens: 2048,
           temperature: 0.1,
         });

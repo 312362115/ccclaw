@@ -5,9 +5,10 @@ RUN apk add --no-cache git bash curl python3 make g++ gcc musl-dev
 
 RUN adduser -D -h /home/agent agent
 
-# 复制 shared 包（编译产物）
+# 复制 shared 包（编译产物）+ 安装其依赖
 COPY packages/shared/dist /shared/dist
 COPY packages/shared/package.json /shared/package.json
+RUN cd /shared && npm install --omit=dev
 
 # 复制 agent-runtime
 COPY packages/agent-runtime/dist /app

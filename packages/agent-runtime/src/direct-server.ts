@@ -12,6 +12,7 @@ export interface DirectServerOptions {
   verifyToken: (token: string) => Promise<boolean>;
   onMessage: (clientId: string, msg: DirectMessage) => void;
   host?: string;
+  port?: number;
   tls?: { cert: string; key: string };
 }
 
