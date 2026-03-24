@@ -1,4 +1,4 @@
-import { mkdir, chmod, cp, readdir } from 'node:fs/promises';
+import { mkdir, chmod, cp, readdir, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
@@ -71,6 +71,11 @@ export function getWorkspacePaths(slug: string) {
     skills: join(base, 'internal', 'skills'),
     wsDb: join(base, 'internal', 'workspace.db'),
   };
+}
+
+export async function removeWorkspaceStorage(slug: string) {
+  const base = join(config.DATA_DIR, 'workspaces', slug);
+  await rm(base, { recursive: true, force: true });
 }
 
 // 构建子进程最小环境变量（防止泄露主服务密钥）

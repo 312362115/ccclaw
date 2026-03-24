@@ -5,7 +5,9 @@ import { createWorkspaceSchema, updateWorkspaceSchema, slugId } from '@ccclaw/sh
 import { authMiddleware } from '../middleware/auth.js';
 import { requireWorkspaceAccess } from '../auth/rbac.js';
 import { audit } from '../middleware/audit.js';
-import { initWorkspaceStorage } from '../core/workspace-storage.js';
+import { initWorkspaceStorage, removeWorkspaceStorage } from '../core/workspace-storage.js';
+import { runnerManager } from '../core/runner-manager.js';
+import { logger } from '../logger.js';
 import type { AppEnv } from '../types.js';
 
 function generateSlug(): string {
@@ -73,9 +75,29 @@ workspacesRouter.patch('/:id', requireWorkspaceAccess(), async (c) => {
 
 workspacesRouter.delete('/:id', requireWorkspaceAccess(), async (c) => {
   const id = c.req.param('id')!;
-  const [deleted] = await db.delete(schema.workspaces)
-    .where(eq(schema.workspaces.id, id)).returning();
-  if (!deleted) return c.json({ error: '工作区不存在' }, 404);
+
+  // 先查出 slug，用于后续清理
+  const [ws] = await db.select().from(schema.workspaces)
+    .where(eq(schema.workspaces.id, id)).limit(1);
+  if (!ws) return c.json({ error: '工作区不存在' }, 404);
+
+  // 1. 停 Runner（Docker 容器 / Local 子进程 / 解绑）
+  try {
+    await runnerManager.stop(ws.slug);
+  } catch (err) {
+    logger.warn({ err, slug: ws.slug }, '停止 Runner 失败，继续删除');
+  }
+
+  // 2. 删数据库记录（级联删除关联表）
+  await db.delete(schema.workspaces).where(eq(schema.workspaces.id, id));
+
+  // 3. 清磁盘文件
+  try {
+    await removeWorkspaceStorage(ws.slug);
+  } catch (err) {
+    logger.warn({ err, slug: ws.slug }, '清理工作区文件失败');
+  }
+
   await audit(c, 'workspace.delete', id);
   return c.json({ ok: true });
 });
