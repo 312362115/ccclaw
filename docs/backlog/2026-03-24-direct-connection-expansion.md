@@ -1,6 +1,6 @@
 ---
 priority: P1
-status: open
+status: done
 ---
 
 # 直连通道扩展：终端 + 文件编辑
