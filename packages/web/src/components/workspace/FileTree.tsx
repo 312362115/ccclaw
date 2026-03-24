@@ -1,4 +1,4 @@
-import { useState, useCallback, type DragEvent } from 'react';
+import { useState, useCallback, useRef, type DragEvent } from 'react';
 import type { TreeEntry } from '@ccclaw/shared';
 import { useFileTreeStore } from '../../stores/file-tree';
 import { ChevronRightIcon, FolderIcon, FileIcon } from '../icons';
@@ -23,6 +23,7 @@ function TreeNode({
   onDragOver,
   onDragLeave,
   onDrop,
+  dragSourcePath,
 }: {
   entry: TreeEntry;
   depth: number;
@@ -37,12 +38,14 @@ function TreeNode({
   onDragOver: (e: DragEvent, path: string) => void;
   onDragLeave: (e: DragEvent) => void;
   onDrop: (e: DragEvent, targetDir: string) => void;
+  dragSourcePath: string | null;
 }) {
   const fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
   const isDir = entry.type === 'directory';
   const isExpanded = expandedPaths.has(fullPath);
   const isSelected = !isDir && previewPath === fullPath;
   const isDragOver = isDir && dragOverPath === fullPath;
+  const isDragging = dragSourcePath === fullPath;
 
   return (
     <div className="my-px">
@@ -56,9 +59,10 @@ function TreeNode({
           if (isDir) onToggleDir(fullPath);
           else onFileClick(fullPath);
         }}
-        className={`group w-full rounded-md min-h-[28px] px-2 flex items-center gap-0.5 text-text-primary transition-colors duration-200 hover:bg-slate-100 ${
+        className={`group w-full rounded-md min-h-[28px] px-2 flex items-center gap-0.5 text-text-primary transition-all duration-150 hover:bg-slate-100 ${
           isSelected ? 'bg-blue-100' : ''
-        } ${isDragOver ? 'bg-blue-50 ring-1 ring-blue-400' : ''}`}
+        } ${isDragOver ? 'bg-blue-100 ring-2 ring-blue-400 ring-inset' : ''
+        } ${isDragging ? 'opacity-40' : ''}`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         {isDir ? (
@@ -110,6 +114,7 @@ function TreeNode({
               onDragOver={onDragOver}
               onDragLeave={onDragLeave}
               onDrop={onDrop}
+              dragSourcePath={dragSourcePath}
             />
           ))}
         </div>
@@ -125,28 +130,42 @@ export function FileTree({ onFileClick, onDeleteClick, onMoveFile }: FileTreePro
   const toggleDir = useFileTreeStore((s) => s.toggleDir);
 
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+  const [dragSourcePath, setDragSourcePath] = useState<string | null>(null);
+  const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleDragStart = useCallback((e: DragEvent, path: string) => {
     e.dataTransfer.setData('text/plain', path);
     e.dataTransfer.effectAllowed = 'move';
+    setDragSourcePath(path);
   }, []);
 
   const handleDragOver = useCallback((e: DragEvent, path: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    setDragOverPath(path);
-  }, []);
+    setDragOverPath((prev) => {
+      if (prev !== path) {
+        // 拖拽悬停在目录上 600ms 后自动展开
+        if (expandTimerRef.current) clearTimeout(expandTimerRef.current);
+        expandTimerRef.current = setTimeout(() => {
+          if (!expandedPaths.has(path)) toggleDir(path);
+        }, 600);
+      }
+      return path;
+    });
+  }, [expandedPaths, toggleDir]);
 
   const handleDragLeave = useCallback((e: DragEvent) => {
-    // 只在真正离开时清除（忽略子元素触发的 leave）
     const related = e.relatedTarget as Node | null;
     if (related && (e.currentTarget as Node).contains(related)) return;
+    if (expandTimerRef.current) clearTimeout(expandTimerRef.current);
     setDragOverPath(null);
   }, []);
 
   const handleDrop = useCallback((e: DragEvent, targetDir: string) => {
     e.preventDefault();
     setDragOverPath(null);
+    setDragSourcePath(null);
+    if (expandTimerRef.current) clearTimeout(expandTimerRef.current);
     const sourcePath = e.dataTransfer.getData('text/plain');
     if (!sourcePath || !onMoveFile) return;
 
@@ -171,6 +190,8 @@ export function FileTree({ onFileClick, onDeleteClick, onMoveFile }: FileTreePro
   const handleRootDrop = useCallback((e: DragEvent) => {
     e.preventDefault();
     setDragOverPath(null);
+    setDragSourcePath(null);
+    if (expandTimerRef.current) clearTimeout(expandTimerRef.current);
     const sourcePath = e.dataTransfer.getData('text/plain');
     if (!sourcePath || !onMoveFile) return;
 
@@ -191,7 +212,9 @@ export function FileTree({ onFileClick, onDeleteClick, onMoveFile }: FileTreePro
       onDragLeave={(e) => {
         const related = e.relatedTarget as Node | null;
         if (related && (e.currentTarget as Node).contains(related)) return;
+        if (expandTimerRef.current) clearTimeout(expandTimerRef.current);
         setDragOverPath(null);
+        setDragSourcePath(null);
       }}
     >
       {entries.map((entry) => (
@@ -210,6 +233,7 @@ export function FileTree({ onFileClick, onDeleteClick, onMoveFile }: FileTreePro
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          dragSourcePath={dragSourcePath}
         />
       ))}
       {entries.length === 0 && (

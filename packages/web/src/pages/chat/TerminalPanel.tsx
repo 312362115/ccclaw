@@ -18,9 +18,10 @@ interface Props {
   workspaceId: string;
   open: boolean;
   onClose: () => void;
+  sendDirectMessage?: (msg: any) => void;
 }
 
-export function TerminalPanel({ workspaceId, open, onClose }: Props) {
+export function TerminalPanel({ workspaceId, open, onClose, sendDirectMessage }: Props) {
   const termRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -64,10 +65,23 @@ export function TerminalPanel({ workspaceId, open, onClose }: Props) {
     xtermRef.current = xterm;
     fitRef.current = fit;
 
-    sendTerminalOpen(workspaceId, sessionId, xterm.cols, xterm.rows);
+    // 优先直连，fallback relay
+    const termSend = sendDirectMessage
+      ? (msg: any) => sendDirectMessage(msg)
+      : null;
+
+    if (termSend) {
+      termSend({ channel: 'terminal', action: 'open', data: { terminalId: sessionId + '_term', cols: xterm.cols, rows: xterm.rows } });
+    } else {
+      sendTerminalOpen(workspaceId, sessionId, xterm.cols, xterm.rows);
+    }
 
     xterm.onData((data) => {
-      sendTerminalInput(workspaceId, sessionId, data);
+      if (termSend) {
+        termSend({ channel: 'terminal', action: 'input', data: { terminalId: sessionId + '_term', data } });
+      } else {
+        sendTerminalInput(workspaceId, sessionId, data);
+      }
     });
 
     onTerminalOutput(sessionId, (data) => {
@@ -80,13 +94,21 @@ export function TerminalPanel({ workspaceId, open, onClose }: Props) {
 
     const resizeObserver = new ResizeObserver(() => {
       fit.fit();
-      sendTerminalResize(workspaceId, sessionId, xterm.cols, xterm.rows);
+      if (termSend) {
+        termSend({ channel: 'terminal', action: 'resize', data: { terminalId: sessionId + '_term', cols: xterm.cols, rows: xterm.rows } });
+      } else {
+        sendTerminalResize(workspaceId, sessionId, xterm.cols, xterm.rows);
+      }
     });
     resizeObserver.observe(termRef.current);
 
     return () => {
       resizeObserver.disconnect();
-      sendTerminalClose(workspaceId, sessionId);
+      if (termSend) {
+        termSend({ channel: 'terminal', action: 'close', data: { terminalId: sessionId + '_term' } });
+      } else {
+        sendTerminalClose(workspaceId, sessionId);
+      }
       offTerminal(sessionId);
       xterm.dispose();
       xtermRef.current = null;

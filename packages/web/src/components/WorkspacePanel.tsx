@@ -238,6 +238,18 @@ export function WorkspacePanel({
     setCreateName('');
   }, [createName, creating, onSendDirectMessage]);
 
+  const handleMoveFile = useCallback(
+    (oldPath: string, newPath: string) => {
+      onSendDirectMessage({
+        channel: 'file',
+        action: 'rename',
+        requestId: generateRequestId(),
+        data: { oldPath, newPath },
+      });
+    },
+    [onSendDirectMessage],
+  );
+
   const handleFileClick = useCallback(
     (path: string) => {
       onSendDirectMessage({
@@ -401,7 +413,7 @@ export function WorkspacePanel({
             </div>
           )}
           {!fileCollapsed && (
-            <FileTree onFileClick={handleFileClick} onDeleteClick={handleDeleteClick} />
+            <FileTree onFileClick={handleFileClick} onDeleteClick={handleDeleteClick} onMoveFile={handleMoveFile} />
           )}
         </div>
 
