@@ -135,7 +135,7 @@ export function ChatPage() {
                 }).catch(() => {});
               }}
             />
-            <FilePreviewPanel />
+            <FilePreviewPanel onSendDirectMessage={sendDirectMessage} />
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center bg-white">

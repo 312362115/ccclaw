@@ -111,9 +111,21 @@ function initModules(): void {
     terminalManager = new TerminalManager({
       workspaceDir: WORKSPACE_DIR,
       onOutput: (terminalId, data) => {
+        // 直连广播（Direct / Tunnel 客户端）
+        directServer?.broadcastToAll({
+          channel: 'terminal',
+          action: 'output',
+          data: { terminalId, data },
+        });
+        // Relay 路径（Server 中转客户端）
         sendToServer({ type: 'terminal_output', terminalId, data });
       },
       onExit: (terminalId, code) => {
+        directServer?.broadcastToAll({
+          channel: 'terminal',
+          action: 'exit',
+          data: { terminalId, code },
+        });
         sendToServer({ type: 'terminal_exit', terminalId, code });
       },
     });
@@ -327,6 +339,31 @@ function handleDirectMessage(
       }
       return;
     }
+  }
+
+  // ── Terminal channel（直连终端）──
+  if (channel === 'terminal') {
+    if (!terminalManager) {
+      logger.warn({ action }, 'terminal: terminalManager 未初始化');
+      return;
+    }
+    const d = data as Record<string, unknown>;
+    const terminalId = d.terminalId as string;
+    if (!terminalId) {
+      logger.warn({ action }, 'terminal: 缺少 terminalId');
+      return;
+    }
+    if (action === 'open') {
+      const ok = terminalManager.open(terminalId, (d.cols as number) ?? 80, (d.rows as number) ?? 24);
+      logger.info({ terminalId, ok, active: terminalManager.getActiveCount() }, 'terminal open（直连）');
+    } else if (action === 'input') {
+      terminalManager.write(terminalId, d.data as string);
+    } else if (action === 'resize') {
+      terminalManager.resize(terminalId, (d.cols as number) ?? 80, (d.rows as number) ?? 24);
+    } else if (action === 'close') {
+      terminalManager.close(terminalId);
+    }
+    return;
   }
 
   if (channel === 'file') {

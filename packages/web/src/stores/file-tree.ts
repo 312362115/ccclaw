@@ -100,12 +100,15 @@ export interface FileTreeState {
   truncated: boolean;
   expandedPaths: Set<string>;
 
-  // Preview
+  // Preview & Edit
   previewPath: string | null;
   previewContent: string | null;
   previewBinary: boolean;
   previewLoading: boolean;
   previewChanged: boolean;
+  previewEditing: boolean;
+  previewSaving: boolean;
+  previewSaveError: string | null;
 
   // Connection
   connectionState: 'INIT' | 'CONNECTING' | 'DIRECT' | 'TUNNEL' | 'RELAY' | 'DISCONNECTED';
@@ -117,6 +120,9 @@ export interface FileTreeState {
   setPreview: (path: string | null, content: string | null, binary: boolean) => void;
   setPreviewLoading: (loading: boolean) => void;
   setPreviewChanged: (changed: boolean) => void;
+  setPreviewEditing: (editing: boolean) => void;
+  setPreviewSaving: (saving: boolean) => void;
+  setPreviewSaveResult: (error?: string) => void;
   setConnectionState: (state: FileTreeState['connectionState']) => void;
   setLoading: (loading: boolean) => void;
   mergeSubtree: (parentPath: string, children: TreeEntry[]) => void;
@@ -133,6 +139,9 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
   previewBinary: false,
   previewLoading: false,
   previewChanged: false,
+  previewEditing: false,
+  previewSaving: false,
+  previewSaveError: null,
 
   connectionState: 'INIT',
 
@@ -154,7 +163,8 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
           break;
         case 'modified':
           updateEntry(next, event);
-          if (state.previewPath === event.path) {
+          // 编辑模式下标记冲突提示，非编辑模式由 useDirectConnection 自动重载
+          if (state.previewPath === event.path && state.previewEditing) {
             previewChanged = true;
           }
           break;
@@ -176,11 +186,17 @@ export const useFileTreeStore = create<FileTreeState>((set, get) => ({
   },
 
   setPreview: (path, content, binary) =>
-    set({ previewPath: path, previewContent: content, previewBinary: binary, previewChanged: false }),
+    set({ previewPath: path, previewContent: content, previewBinary: binary, previewChanged: false, previewEditing: false, previewSaving: false, previewSaveError: null }),
 
   setPreviewLoading: (loading) => set({ previewLoading: loading }),
 
   setPreviewChanged: (changed) => set({ previewChanged: changed }),
+
+  setPreviewEditing: (editing) => set({ previewEditing: editing, previewSaveError: null }),
+
+  setPreviewSaving: (saving) => set({ previewSaving: saving }),
+
+  setPreviewSaveResult: (error) => set({ previewSaving: false, previewSaveError: error ?? null }),
 
   setConnectionState: (connectionState) => set({ connectionState }),
 

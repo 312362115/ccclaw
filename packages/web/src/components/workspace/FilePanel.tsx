@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useFileTreeStore } from '../../stores/file-tree';
 import { FileTree } from './FileTree';
-import { FilePreview } from './FilePreview';
 
 function generateRequestId(): string {
   return 'req-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
@@ -95,16 +94,6 @@ export function FilePanel({ onSendDirectMessage }: FilePanelProps) {
     setCreateName('');
   }, []);
 
-  const handleReload = useCallback(() => {
-    const previewPath = useFileTreeStore.getState().previewPath;
-    if (!previewPath) return;
-    onSendDirectMessage({
-      channel: 'file',
-      action: 'read',
-      requestId: generateRequestId(),
-      data: { path: previewPath },
-    });
-  }, [onSendDirectMessage]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -171,13 +160,8 @@ export function FilePanel({ onSendDirectMessage }: FilePanelProps) {
       )}
 
       {/* File tree */}
-      <div className="flex-[2] min-h-0 overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
         <FileTree onFileClick={handleFileClick} onDeleteClick={handleDeleteClick} onMoveFile={handleMoveFile} />
-      </div>
-
-      {/* File preview (1/3 height) */}
-      <div className="flex-1 min-h-0 border-t border-line-soft overflow-hidden">
-        <FilePreview onReload={handleReload} />
       </div>
 
       {/* Delete confirmation modal */}

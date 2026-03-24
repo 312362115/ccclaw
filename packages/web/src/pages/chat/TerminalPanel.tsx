@@ -13,6 +13,11 @@ import {
   onTerminalExit,
   offTerminal,
 } from '../../api/ws';
+import {
+  onDirectTerminalOutput,
+  onDirectTerminalExit,
+  offDirectTerminal,
+} from '../../hooks/useDirectConnection';
 
 interface Props {
   workspaceId: string;
@@ -84,13 +89,25 @@ export function TerminalPanel({ workspaceId, open, onClose, sendDirectMessage }:
       }
     });
 
-    onTerminalOutput(sessionId, (data) => {
-      xterm.write(data);
-    });
+    const termId = sessionId + '_term';
 
-    onTerminalExit(sessionId, (code) => {
-      xterm.write(`\r\n[Process exited with code ${code}]\r\n`);
-    });
+    if (termSend) {
+      // 直连路径：通过 useDirectConnection 的事件总线接收输出
+      onDirectTerminalOutput(termId, (data) => {
+        xterm.write(data);
+      });
+      onDirectTerminalExit(termId, (code) => {
+        xterm.write(`\r\n[Process exited with code ${code}]\r\n`);
+      });
+    } else {
+      // Relay 路径：通过 ws.ts 回调接收输出
+      onTerminalOutput(sessionId, (data) => {
+        xterm.write(data);
+      });
+      onTerminalExit(sessionId, (code) => {
+        xterm.write(`\r\n[Process exited with code ${code}]\r\n`);
+      });
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       fit.fit();
@@ -105,11 +122,12 @@ export function TerminalPanel({ workspaceId, open, onClose, sendDirectMessage }:
     return () => {
       resizeObserver.disconnect();
       if (termSend) {
-        termSend({ channel: 'terminal', action: 'close', data: { terminalId: sessionId + '_term' } });
+        termSend({ channel: 'terminal', action: 'close', data: { terminalId: termId } });
+        offDirectTerminal(termId);
       } else {
         sendTerminalClose(workspaceId, sessionId);
+        offTerminal(sessionId);
       }
-      offTerminal(sessionId);
       xterm.dispose();
       xtermRef.current = null;
       fitRef.current = null;

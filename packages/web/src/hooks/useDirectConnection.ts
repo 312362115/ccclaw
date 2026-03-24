@@ -4,6 +4,21 @@ import { api } from '../api/client';
 import { useFileTreeStore } from '../stores/file-tree';
 import { useChatStore } from '../stores/chat';
 
+// ── Terminal event bus（直连终端回调注册）──
+const terminalOutputCbs = new Map<string, (data: string) => void>();
+const terminalExitCbs = new Map<string, (code: number) => void>();
+
+export function onDirectTerminalOutput(terminalId: string, cb: (data: string) => void): void {
+  terminalOutputCbs.set(terminalId, cb);
+}
+export function onDirectTerminalExit(terminalId: string, cb: (code: number) => void): void {
+  terminalExitCbs.set(terminalId, cb);
+}
+export function offDirectTerminal(terminalId: string): void {
+  terminalOutputCbs.delete(terminalId);
+  terminalExitCbs.delete(terminalId);
+}
+
 export function useDirectConnection(workspaceId: string | null) {
   const clientRef = useRef<DirectWsClient | null>(null);
   const store = useFileTreeStore;
@@ -42,6 +57,21 @@ export function useDirectConnection(workspaceId: string | null) {
             }
           } else if (msg.action === 'event' || msg.action === 'events') {
             s.applyEvents(msg.data.events);
+
+            // 非编辑模式下，当前预览文件被外部修改时自动重载
+            const { previewPath, previewEditing } = store.getState();
+            if (previewPath && !previewEditing) {
+              const events = msg.data.events as { type: string; path: string }[];
+              const affected = events.some((e) => e.type === 'modified' && e.path === previewPath);
+              if (affected) {
+                client.send({
+                  channel: 'file',
+                  action: 'read',
+                  requestId: 'auto-reload-' + Date.now(),
+                  data: { path: previewPath },
+                }).catch(() => {});
+              }
+            }
           }
         }
 
@@ -49,6 +79,21 @@ export function useDirectConnection(workspaceId: string | null) {
         else if (msg.channel === 'file') {
           if (msg.action === 'read_result') {
             s.setPreview(msg.data.path, msg.data.content, msg.data.binary);
+          } else if (msg.action === 'write_result') {
+            s.setPreviewSaveResult();
+          } else if (msg.action === 'error' && msg.requestId) {
+            s.setPreviewSaveResult(msg.data.message || '保存失败');
+          }
+        }
+
+        // ── Terminal events（直连终端输出）──
+        else if (msg.channel === 'terminal') {
+          const d = msg.data as Record<string, unknown>;
+          const terminalId = d.terminalId as string;
+          if (msg.action === 'output') {
+            terminalOutputCbs.get(terminalId)?.(d.data as string);
+          } else if (msg.action === 'exit') {
+            terminalExitCbs.get(terminalId)?.(d.code as number);
           }
         }
 
