@@ -50,6 +50,18 @@ export function FilePanel({ onSendDirectMessage }: FilePanelProps) {
     [],
   );
 
+  const handleMoveFile = useCallback(
+    (oldPath: string, newPath: string) => {
+      onSendDirectMessage({
+        channel: 'file',
+        action: 'rename',
+        requestId: generateRequestId(),
+        data: { oldPath, newPath },
+      });
+    },
+    [onSendDirectMessage],
+  );
+
   const confirmDelete = useCallback(() => {
     if (!deleteConfirm) return;
     onSendDirectMessage({
@@ -160,7 +172,7 @@ export function FilePanel({ onSendDirectMessage }: FilePanelProps) {
 
       {/* File tree */}
       <div className="flex-[2] min-h-0 overflow-hidden flex flex-col">
-        <FileTree onFileClick={handleFileClick} onDeleteClick={handleDeleteClick} />
+        <FileTree onFileClick={handleFileClick} onDeleteClick={handleDeleteClick} onMoveFile={handleMoveFile} />
       </div>
 
       {/* File preview (1/3 height) */}

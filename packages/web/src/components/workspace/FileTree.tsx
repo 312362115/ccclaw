@@ -1,3 +1,4 @@
+import { useState, useCallback, type DragEvent } from 'react';
 import type { TreeEntry } from '@ccclaw/shared';
 import { useFileTreeStore } from '../../stores/file-tree';
 import { ChevronRightIcon, FolderIcon, FileIcon } from '../icons';
@@ -5,6 +6,7 @@ import { ChevronRightIcon, FolderIcon, FileIcon } from '../icons';
 interface FileTreeProps {
   onFileClick: (path: string) => void;
   onDeleteClick: (path: string, type: 'file' | 'directory') => void;
+  onMoveFile?: (oldPath: string, newPath: string) => void;
 }
 
 function TreeNode({
@@ -13,34 +15,50 @@ function TreeNode({
   parentPath,
   previewPath,
   expandedPaths,
+  dragOverPath,
   onToggleDir,
   onFileClick,
   onDeleteClick,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDrop,
 }: {
   entry: TreeEntry;
   depth: number;
   parentPath: string;
   previewPath: string | null;
   expandedPaths: Set<string>;
+  dragOverPath: string | null;
   onToggleDir: (path: string) => void;
   onFileClick: (path: string) => void;
   onDeleteClick: (path: string, type: 'file' | 'directory') => void;
+  onDragStart: (e: DragEvent, path: string) => void;
+  onDragOver: (e: DragEvent, path: string) => void;
+  onDragLeave: (e: DragEvent) => void;
+  onDrop: (e: DragEvent, targetDir: string) => void;
 }) {
   const fullPath = parentPath ? `${parentPath}/${entry.name}` : entry.name;
   const isDir = entry.type === 'directory';
   const isExpanded = expandedPaths.has(fullPath);
   const isSelected = !isDir && previewPath === fullPath;
+  const isDragOver = isDir && dragOverPath === fullPath;
 
   return (
     <div className="my-px">
       <button
+        draggable
+        onDragStart={(e) => onDragStart(e, fullPath)}
+        onDragOver={(e) => { if (isDir) onDragOver(e, fullPath); }}
+        onDragLeave={(e) => { if (isDir) onDragLeave(e); }}
+        onDrop={(e) => { if (isDir) onDrop(e, fullPath); }}
         onClick={() => {
           if (isDir) onToggleDir(fullPath);
           else onFileClick(fullPath);
         }}
         className={`group w-full rounded-md min-h-[28px] px-2 flex items-center gap-0.5 text-text-primary transition-colors duration-200 hover:bg-slate-100 ${
           isSelected ? 'bg-blue-100' : ''
-        }`}
+        } ${isDragOver ? 'bg-blue-50 ring-1 ring-blue-400' : ''}`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
       >
         {isDir ? (
@@ -84,9 +102,14 @@ function TreeNode({
               parentPath={fullPath}
               previewPath={previewPath}
               expandedPaths={expandedPaths}
+              dragOverPath={dragOverPath}
               onToggleDir={onToggleDir}
               onFileClick={onFileClick}
               onDeleteClick={onDeleteClick}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
             />
           ))}
         </div>
@@ -95,14 +118,82 @@ function TreeNode({
   );
 }
 
-export function FileTree({ onFileClick, onDeleteClick }: FileTreeProps) {
+export function FileTree({ onFileClick, onDeleteClick, onMoveFile }: FileTreeProps) {
   const entries = useFileTreeStore((s) => s.entries);
   const expandedPaths = useFileTreeStore((s) => s.expandedPaths);
   const previewPath = useFileTreeStore((s) => s.previewPath);
   const toggleDir = useFileTreeStore((s) => s.toggleDir);
 
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+
+  const handleDragStart = useCallback((e: DragEvent, path: string) => {
+    e.dataTransfer.setData('text/plain', path);
+    e.dataTransfer.effectAllowed = 'move';
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent, path: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverPath(path);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    // 只在真正离开时清除（忽略子元素触发的 leave）
+    const related = e.relatedTarget as Node | null;
+    if (related && (e.currentTarget as Node).contains(related)) return;
+    setDragOverPath(null);
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent, targetDir: string) => {
+    e.preventDefault();
+    setDragOverPath(null);
+    const sourcePath = e.dataTransfer.getData('text/plain');
+    if (!sourcePath || !onMoveFile) return;
+
+    // 不能移动到自身或自身的子目录
+    if (targetDir === sourcePath || targetDir.startsWith(sourcePath + '/')) return;
+
+    const fileName = sourcePath.split('/').pop()!;
+    const newPath = `${targetDir}/${fileName}`;
+
+    // 源和目标相同则跳过
+    if (newPath === sourcePath) return;
+
+    onMoveFile(sourcePath, newPath);
+  }, [onMoveFile]);
+
+  const handleRootDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverPath('__root__');
+  }, []);
+
+  const handleRootDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    setDragOverPath(null);
+    const sourcePath = e.dataTransfer.getData('text/plain');
+    if (!sourcePath || !onMoveFile) return;
+
+    // 已经在根目录则跳过
+    if (!sourcePath.includes('/')) return;
+
+    const fileName = sourcePath.split('/').pop()!;
+    onMoveFile(sourcePath, fileName);
+  }, [onMoveFile]);
+
+  const isRootDragOver = dragOverPath === '__root__';
+
   return (
-    <div className="px-1 overflow-y-auto flex-1 min-h-0">
+    <div
+      className={`px-1 overflow-y-auto flex-1 min-h-0 ${isRootDragOver ? 'bg-blue-50/50' : ''}`}
+      onDragOver={handleRootDragOver}
+      onDrop={handleRootDrop}
+      onDragLeave={(e) => {
+        const related = e.relatedTarget as Node | null;
+        if (related && (e.currentTarget as Node).contains(related)) return;
+        setDragOverPath(null);
+      }}
+    >
       {entries.map((entry) => (
         <TreeNode
           key={entry.name}
@@ -111,9 +202,14 @@ export function FileTree({ onFileClick, onDeleteClick }: FileTreeProps) {
           parentPath=""
           previewPath={previewPath}
           expandedPaths={expandedPaths}
+          dragOverPath={dragOverPath}
           onToggleDir={toggleDir}
           onFileClick={onFileClick}
           onDeleteClick={onDeleteClick}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         />
       ))}
       {entries.length === 0 && (
