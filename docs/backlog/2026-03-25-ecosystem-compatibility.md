@@ -1,6 +1,7 @@
 ---
 priority: P1
-status: open
+status: done
+plan: docs/plans/2026-03-25-ecosystem-compatibility-plan.md
 ---
 
 # 生态兼容：打通 Claude Code 生态（MCP / Skill / Plugin）

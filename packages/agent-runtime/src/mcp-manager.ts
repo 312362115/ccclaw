@@ -96,6 +96,12 @@ export class MCPManager {
           this.toolRegistry.register({
             name: `mcp_${name}_${tool.name}`,
             description: tool.description || '',
+            // 透传 MCP server 返回的 inputSchema，让 LLM 看到完整参数描述
+            schema: tool.inputSchema ? {
+              type: 'object' as const,
+              properties: (tool.inputSchema as any).properties ?? {},
+              required: (tool.inputSchema as any).required,
+            } : undefined,
             execute: (params) => this._callTool(transport, capturedId, capturedToolName, params),
           });
         }
@@ -118,7 +124,7 @@ export class MCPManager {
     return new HttpTransport(config.url, config.headers);
   }
 
-  /** 调用单个工具，通过 JSON-RPC tools/call */
+  /** 调用单个工具，通过 JSON-RPC tools/call。带重试 */
   private async _callTool(
     transport: MCPTransport,
     id: number,
@@ -131,9 +137,72 @@ export class MCPManager {
       method: 'tools/call',
       params: { name: toolName, arguments: params },
     };
-    const resp = await transport.send(req);
-    if (resp.error) return `Error: ${resp.error.message}`;
-    return JSON.stringify(resp.result);
+
+    try {
+      const resp = await transport.send(req);
+      if (resp.error) return `Error: ${resp.error.message}`;
+      return JSON.stringify(resp.result);
+    } catch (err) {
+      // 传输层错误（进程崩溃 / 网络断开）→ 尝试重连一次
+      const serverName = this.findServerByTransport(transport);
+      if (serverName) {
+        logger.warn(`MCP ${serverName} 调用失败，尝试重连: ${err}`);
+        const reconnected = await this.reconnect(serverName);
+        if (reconnected) {
+          // 重连成功，用新 transport 重试
+          const conn = this.connections.get(serverName);
+          if (conn) {
+            try {
+              const resp = await conn.transport.send(req);
+              if (resp.error) return `Error: ${resp.error.message}`;
+              return JSON.stringify(resp.result);
+            } catch (retryErr) {
+              return `Error: MCP ${serverName} 重连后仍失败: ${retryErr}`;
+            }
+          }
+        }
+      }
+      return `Error: MCP 工具调用失败: ${err}`;
+    }
+  }
+
+  /** 通过 transport 实例反查 server 名称 */
+  private findServerByTransport(transport: MCPTransport): string | undefined {
+    for (const [name, conn] of this.connections) {
+      if (conn.transport === transport) return name;
+    }
+    return undefined;
+  }
+
+  /** 重连指定 MCP server */
+  private async reconnect(serverName: string): Promise<boolean> {
+    const config = this.servers[serverName];
+    if (!config) return false;
+
+    // 关闭旧连接
+    const oldConn = this.connections.get(serverName);
+    if (oldConn) {
+      try { oldConn.transport.close(); } catch { /* ignore */ }
+      this.connections.delete(serverName);
+    }
+
+    try {
+      const transport = this.createTransport(config);
+      let nextId = 1;
+
+      await transport.send({ jsonrpc: '2.0', id: nextId++, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {} } });
+
+      const listResp = await transport.send({ jsonrpc: '2.0', id: nextId++, method: 'tools/list', params: {} });
+      const tools = ((listResp.result as Record<string, unknown>)?.tools as MCPToolInfo[]) || [];
+      const filtered = this.filterByEnabledList(tools, config.enabledTools);
+
+      this.connections.set(serverName, { transport, tools: filtered });
+      logger.warn(`MCP ${serverName} 重连成功（${filtered.length} 个工具）`);
+      return true;
+    } catch (err) {
+      logger.warn(`MCP ${serverName} 重连失败: ${err}`);
+      return false;
+    }
   }
 
   /** 白名单过滤 */

@@ -1,0 +1,12 @@
+{
+  "id": "medium-02",
+  "name": "新增商品删除功能",
+  "difficulty": "medium",
+  "description": "在商品管理代码中新增删除功能：1) 在 src/store.ts 中新增 deleteProduct(id: number): boolean 函数，删除指定 ID 的商品，返回是否删除成功 2) 在 src/api.ts 中新增 handleDeleteProduct(id: number) 调用 store 的删除函数",
+  "fixture": "cross-file",
+  "acceptance": [
+    { "type": "file_contains", "file": "src/store.ts", "pattern": "deleteProduct" },
+    { "type": "file_contains", "file": "src/api.ts", "pattern": "handleDeleteProduct" },
+    { "type": "file_contains", "file": "src/api.ts", "pattern": "deleteProduct" }
+  ]
+}

@@ -19,7 +19,11 @@ export type WsMessageType =
   | 'plan_mode'
   | 'terminal_output'
   | 'terminal_exit'
-  | 'error';
+  | 'error'
+  // UX 增强事件
+  | 'tool_output_delta'
+  | 'diff_preview'
+  | 'tool_error_options';
 
 export interface WsIncoming {
   type: WsMessageType;
@@ -46,6 +50,12 @@ export interface WsIncoming {
   // terminal_output / terminal_exit
   data?: string;
   code?: number;
+  // UX 增强：diff_preview / tool_error_options
+  diff?: string;
+  filePath?: string;
+  error?: string;
+  options?: string[];
+  delta?: string;
 }
 
 type MessageHandler = (msg: WsIncoming) => void;

@@ -15,6 +15,7 @@ import { adminRouter } from './admin.js';
 import { oauthRouter } from './oauth.js';
 import { runnerInfoRoute } from './runner-info.js';
 import { skillMarketplaceRouter } from './skill-marketplace.js';
+import { mcpServersRouter } from './mcp-servers.js';
 import { runnerBootstrapRouter } from './runner-bootstrap.js';
 import { apiRateLimitMiddleware } from '../auth/rate-limit.js';
 
@@ -38,5 +39,6 @@ api.route('/dashboard', dashboardRouter);
 api.route('/invite-codes', inviteCodesRouter);
 api.route('/settings/preferences', preferencesRouter);
 api.route('/admin', adminRouter);
+api.route('/mcp-servers', mcpServersRouter);
 api.route('/', runnerInfoRoute);          // /api/workspaces/:id/runner-info
 api.route('/', runnerBootstrapRouter);   // /api/runner-bootstrap + /api/runner-bundle

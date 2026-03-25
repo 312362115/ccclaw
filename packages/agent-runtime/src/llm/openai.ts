@@ -179,6 +179,7 @@ export class OpenAIAdapter implements LLMProvider {
   private readonly apiKey: string;
   private readonly apiBase: string;
   readonly defaultModel?: string;
+  private profileRegistry?: import('./profiles/index.js').ProfileRegistry;
 
   constructor(config: ProviderConfig) {
     if (!config.apiKey) {
@@ -189,7 +190,27 @@ export class OpenAIAdapter implements LLMProvider {
     this.defaultModel = config.defaultModel;
   }
 
+  /** 注入 ProfileRegistry，启用模型级能力声明 */
+  setProfileRegistry(registry: import('./profiles/index.js').ProfileRegistry): void {
+    this.profileRegistry = registry;
+  }
+
   capabilities(): ProviderCapabilities {
+    // 如果有 ProfileRegistry，委托给当前模型的 Profile
+    if (this.profileRegistry && this.defaultModel) {
+      const profile = this.profileRegistry.resolve(this.defaultModel);
+      return {
+        streaming: true,
+        toolUse: profile.capabilities.toolUse,
+        extendedThinking: profile.capabilities.extendedThinking,
+        promptCaching: profile.capabilities.promptCaching,
+        vision: profile.capabilities.vision,
+        contextWindow: profile.capabilities.contextWindow,
+        maxOutputTokens: profile.capabilities.maxOutputTokens,
+      };
+    }
+
+    // 兜底：无 Profile 时的默认值
     return {
       streaming: true,
       toolUse: true,
@@ -232,6 +253,10 @@ export class OpenAIAdapter implements LLMProvider {
 
     if (tools && tools.length > 0) {
       body.tools = toOpenAITools(tools);
+    }
+
+    if (params.responseFormat) {
+      body.response_format = params.responseFormat;
     }
 
     const response = await withRetry(async () => {
@@ -314,6 +339,10 @@ export class OpenAIAdapter implements LLMProvider {
 
     if (tools && tools.length > 0) {
       body.tools = toOpenAITools(tools);
+    }
+
+    if (params.responseFormat) {
+      body.response_format = params.responseFormat;
     }
 
     const res = await fetch(`${this.apiBase}/v1/chat/completions`, {

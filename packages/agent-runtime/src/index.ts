@@ -31,6 +31,9 @@ import { createSpawnTool } from './tools/spawn.js';
 import { SubagentManager } from './subagent-manager.js';
 import { HookRunner } from './hook-runner.js';
 import { logger } from './logger.js';
+import { createTypeScriptVerifier } from './verify/typescript.js';
+import { createPythonVerifier } from './verify/python.js';
+import { createJsonVerifier, createBracketVerifier } from './verify/generic.js';
 
 // ====== 环境变量 ======
 
@@ -95,6 +98,9 @@ function initModules(): void {
     // HookRunner（工具执行前后触发用户脚本）
     const hookRunner = new HookRunner(WORKSPACE_DIR);
     toolRegistry.setHookRunner(hookRunner);
+
+    // Write-Verify-Fix：注册工具执行后的自动验证器
+    registerVerifiers(toolRegistry);
 
     // MCP Manager（从环境变量或配置中获取 MCP servers，当前为空）
     const mcpManager = new MCPManager({}, toolRegistry);
@@ -530,6 +536,26 @@ function applyConfig(cfg: import('./protocol.js').RuntimeConfig) {
   cachedSkills = cfg.skills ?? [];
   cachedWorkspaceId = cfg.workspaceId || '';
   cachedUserPreferences = cfg.userPreferences || {};
+
+  // MCP Server 配置：重建 MCPManager
+  if (cfg.mcpServers && cfg.mcpServers.length > 0 && sharedDeps) {
+    const mcpConfig: Record<string, import('./mcp-manager.js').MCPServerConfig> = {};
+    for (const entry of cfg.mcpServers) {
+      mcpConfig[entry.name] = {
+        command: entry.command,
+        args: entry.args,
+        env: entry.env,
+        transport: entry.transport,
+        url: entry.url,
+        headers: entry.headers,
+        enabledTools: entry.enabledTools,
+      };
+    }
+    // 断开旧连接，重建
+    sharedDeps.mcpManager?.disconnect();
+    sharedDeps.mcpManager = new MCPManager(mcpConfig, sharedDeps.toolRegistry);
+    logger.info({ serverCount: cfg.mcpServers.length }, 'MCP Server 配置已更新');
+  }
 }
 
 // ====== 消息处理 ======
@@ -683,6 +709,18 @@ function shutdown() {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+// ====== Write-Verify-Fix 验证器注册 ======
+
+function registerVerifiers(toolRegistry: ToolRegistry): void {
+  const vr = toolRegistry.getVerifierRegistry();
+  // 通用验证器（所有文件）
+  vr.register(['write', 'edit'], createJsonVerifier());
+  vr.register(['write', 'edit'], createBracketVerifier());
+  // 语言专项验证器
+  vr.register(['write', 'edit'], createTypeScriptVerifier());
+  vr.register(['write', 'edit'], createPythonVerifier());
+}
 
 // ====== 启动 ======
 

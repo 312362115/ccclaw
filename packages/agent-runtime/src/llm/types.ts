@@ -100,6 +100,8 @@ export interface ChatParams {
   signal?: AbortSignal;
   thinkingConfig?: { budgetTokens: number };
   cacheControl?: CacheHint;
+  /** 结构化输出格式（目前仅 OpenAI 兼容 API 支持） */
+  responseFormat?: { type: 'json_object' | 'text' };
 }
 
 // ============================================================
@@ -166,7 +168,11 @@ export type AgentStreamEvent =
   | { type: 'subagent_result'; subagentId: string; result: string }
   | { type: 'consolidation'; summary: string }
   | { type: 'plan_mode'; active: boolean }
-  | { type: 'session_done'; usage: TokenUsage };
+  | { type: 'session_done'; usage: TokenUsage }
+  // UX 增强事件
+  | { type: 'tool_output_delta'; toolCallId: string; delta: string }
+  | { type: 'diff_preview'; toolCallId: string; diff: string; filePath: string }
+  | { type: 'tool_error_options'; toolCallId: string; error: string; options: string[] };
 
 // ============================================================
 // LLMProvider interface

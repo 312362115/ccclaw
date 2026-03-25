@@ -235,13 +235,24 @@ export function ChatMessage({ msg, workspaceId, sessionId }: Props) {
     );
   }
 
-  // ── Thinking message ──
+  // ── Thinking message（折叠/展开） ──
   if (msg.role === 'thinking') {
+    const [thinkingExpanded, setThinkingExpanded] = useState(false);
+    const isLong = msg.content.length > 200;
     return (
       <div className="max-w-[720px] animate-fade-in">
-        <div className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 text-[13px] text-purple-800 italic leading-relaxed">
+        <div
+          className="bg-purple-50 border border-purple-200 rounded-2xl px-4 py-3 text-[13px] text-purple-800 italic leading-relaxed cursor-pointer select-none"
+          onClick={() => isLong && setThinkingExpanded(!thinkingExpanded)}
+        >
           <span className="mr-1.5">🧠</span>
-          {msg.content}
+          {isLong && !thinkingExpanded
+            ? <>{msg.content.slice(0, 200)}... <span className="text-purple-500 text-xs not-italic">(点击展开)</span></>
+            : msg.content
+          }
+          {isLong && thinkingExpanded && (
+            <span className="text-purple-500 text-xs not-italic ml-2">(点击收起)</span>
+          )}
         </div>
       </div>
     );

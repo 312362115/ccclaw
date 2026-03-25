@@ -57,10 +57,23 @@ export class AgentManager {
       if (mcp.workspaceId) mcpMap.set(mcp.name, mcp);
     }
 
+    // 转换 MCP Server 为 RuntimeConfig 格式
+    const mcpEntries = [...mcpMap.values()].map((mcp: any) => ({
+      name: mcp.name,
+      command: mcp.command ?? undefined,
+      args: mcp.args ? JSON.parse(mcp.args) : undefined,
+      env: mcp.env ? JSON.parse(mcp.env) : undefined,
+      transport: mcp.transport ?? undefined,
+      url: mcp.url ?? undefined,
+      headers: mcp.headers ? JSON.parse(mcp.headers) : undefined,
+      enabledTools: mcp.enabledTools ? JSON.parse(mcp.enabledTools) : undefined,
+    }));
+
     return {
       // history 和 memories 由 Runner 从 workspace.db 本地加载
       memories: [] as string[],
       skills: skills.map((s: any) => `## ${s.name}\n${s.content}`),
+      mcpServers: mcpEntries,
       history: [] as Array<{ role: string; content: string }>,
       systemPrompt: this.buildSystemPrompt(prefs),
     };
@@ -134,6 +147,7 @@ export class AgentManager {
       model,
       systemPrompt: context.systemPrompt,
       skills: context.skills,
+      mcpServers: context.mcpServers,
     };
   }
 

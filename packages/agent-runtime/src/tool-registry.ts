@@ -7,6 +7,7 @@
 
 import type { HookRunner } from './hook-runner.js';
 import { resolve } from 'node:path';
+import { VerifierRegistry, formatVerifyFeedback } from './verify/index.js';
 
 // ====== Types ======
 
@@ -27,11 +28,19 @@ export interface ToolDefinition {
   schema?: ToolSchema;
 }
 
+/** 工具执行上下文（可选，传递流式回调等） */
+export interface ToolExecuteContext {
+  /** 流式输出回调：bash 等长时间工具可逐行输出 */
+  onProgress?: (delta: string) => void;
+  /** 当前工具调用的 ID（用于关联前端事件） */
+  toolCallId?: string;
+}
+
 export interface Tool {
   name: string;
   description: string;
   schema?: ToolSchema;
-  execute(input: Record<string, unknown>): Promise<string>;
+  execute(input: Record<string, unknown>, context?: ToolExecuteContext): Promise<string>;
 }
 
 // ====== Constants ======
@@ -55,6 +64,7 @@ export class ToolRegistry {
   private restrictedTools: Set<string> | null = null;
   private hookRunner: HookRunner | null = null;
   private confirmCallback: ConfirmCallback | null = null;
+  private verifierRegistry = new VerifierRegistry();
 
   /** 设置 Hook Runner（工具执行前后触发用户脚本） */
   setHookRunner(runner: HookRunner): void {
@@ -64,6 +74,11 @@ export class ToolRegistry {
   /** 设置确认回调（用于 ToolGuard 需要用户审批的场景） */
   setConfirmCallback(cb: ConfirmCallback): void {
     this.confirmCallback = cb;
+  }
+
+  /** 获取 VerifierRegistry，用于注册验证器 */
+  getVerifierRegistry(): VerifierRegistry {
+    return this.verifierRegistry;
   }
 
   /** 注册一个工具 */
@@ -127,7 +142,7 @@ export class ToolRegistry {
   }
 
   /** 执行工具，返回结果字符串 */
-  async execute(name: string, params: Record<string, unknown>): Promise<string> {
+  async execute(name: string, params: Record<string, unknown>, context?: ToolExecuteContext): Promise<string> {
     if (this.restrictedTools && !this.restrictedTools.has(name)) {
       return `Error: Tool "${name}" is not available during context consolidation. Only memory tools are allowed.`;
     }
@@ -163,13 +178,21 @@ export class ToolRegistry {
         }
       }
 
-      let result = await tool.execute(casted);
+      let result = await tool.execute(casted, context);
 
       // After hook
       if (this.hookRunner?.hasHooks) {
         const hookResult = await this.hookRunner.run('after', name, casted);
         if (hookResult) {
           result += `\n[Hook] ${hookResult}`;
+        }
+      }
+
+      // Write-Verify-Fix：工具执行后自动验证
+      if (this.verifierRegistry.hasVerifiers(name)) {
+        const verifyResult = await this.verifierRegistry.verify(name, casted, result);
+        if (!verifyResult.passed) {
+          result += formatVerifyFeedback(verifyResult);
         }
       }
 

@@ -1,0 +1,11 @@
+{
+  "id": "simple-02",
+  "name": "给 User 接口加 phone 字段",
+  "difficulty": "simple",
+  "description": "在 src/user.ts 的 User 接口中新增可选字段 phone?: string。同时更新 formatUser 函数，当 phone 存在时在输出末尾加上电话号码。",
+  "fixture": "add-field",
+  "acceptance": [
+    { "type": "file_contains", "file": "src/user.ts", "pattern": "phone\\??: string" },
+    { "type": "file_contains", "file": "src/user.ts", "pattern": "phone" }
+  ]
+}

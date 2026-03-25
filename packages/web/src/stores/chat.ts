@@ -78,6 +78,7 @@ interface ChatState {
   onToolUseDelta: (sessionId: string, toolId: string, input: string) => void;
   onToolUseEnd: (sessionId: string, toolId: string) => void;
   onToolResult: (sessionId: string, toolId: string, output: string) => void;
+  onToolOutputDelta: (sessionId: string, toolId: string, delta: string) => void;
 
   onThinkingDelta: (sessionId: string, content: string) => void;
   onConsolidation: (sessionId: string, message: string) => void;
@@ -404,6 +405,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ messages: newMap });
   },
 
+  /** bash 实时输出：增量追加到 tool call 的 output */
+  onToolOutputDelta: (sessionId: string, toolId: string, delta: string) => {
+    const state = get();
+    const msgs = [...(state.messages.get(sessionId) || [])];
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const tc = msgs[i].toolCalls?.find((t) => t.id === toolId);
+      if (tc) {
+        msgs[i] = updateToolCall(msgs[i], toolId, (t) => ({
+          ...t,
+          output: (t.output ?? '') + delta,
+        }));
+        break;
+      }
+    }
+    const newMap = new Map(state.messages);
+    newMap.set(sessionId, msgs);
+    set({ messages: newMap });
+  },
+
   // ── Thinking ─────────────────────────────────────────────────────────────
 
   onThinkingDelta: (sessionId, content) => {
@@ -573,6 +593,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       if (msg.type === 'subagent_result') {
         get().onConsolidation(sessionId, `[子 Agent 完成] ${msg.taskId}: ${msg.output ?? ''}`);
+        return;
+      }
+
+      // UX 增强事件：tool_output_delta（bash 实时输出）
+      if (msg.type === 'tool_output_delta') {
+        // 追加到对应 tool call 的 output（实时更新）
+        if (msg.toolId) {
+          get().onToolOutputDelta(sessionId, msg.toolId, msg.delta ?? '');
+        }
+        return;
+      }
+
+      // UX 增强事件：diff_preview（编辑前预览）— 当前只做日志，后续可弹窗确认
+      if (msg.type === 'diff_preview') {
+        // 暂时作为 tool output 的一部分展示
+        return;
+      }
+
+      // UX 增强事件：tool_error_options（错误恢复选项）— 当前只做日志
+      if (msg.type === 'tool_error_options') {
         return;
       }
 

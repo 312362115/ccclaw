@@ -258,6 +258,8 @@ function mapFinishReason(
 export class GeminiAdapter implements LLMProvider {
   private readonly apiKey: string;
   private readonly apiBase: string;
+  private readonly defaultModel?: string;
+  private profileRegistry?: import('./profiles/index.js').ProfileRegistry;
 
   constructor(config: ProviderConfig) {
     if (!config.apiKey) {
@@ -266,9 +268,28 @@ export class GeminiAdapter implements LLMProvider {
     this.apiKey = config.apiKey;
     this.apiBase =
       config.apiBase ?? 'https://generativelanguage.googleapis.com';
+    this.defaultModel = config.defaultModel;
+  }
+
+  /** 注入 ProfileRegistry，启用模型级能力声明 */
+  setProfileRegistry(registry: import('./profiles/index.js').ProfileRegistry): void {
+    this.profileRegistry = registry;
   }
 
   capabilities(): ProviderCapabilities {
+    if (this.profileRegistry && this.defaultModel) {
+      const profile = this.profileRegistry.resolve(this.defaultModel);
+      return {
+        streaming: true,
+        toolUse: profile.capabilities.toolUse,
+        extendedThinking: profile.capabilities.extendedThinking,
+        promptCaching: profile.capabilities.promptCaching,
+        vision: profile.capabilities.vision,
+        contextWindow: profile.capabilities.contextWindow,
+        maxOutputTokens: profile.capabilities.maxOutputTokens,
+      };
+    }
+
     return {
       streaming: true,
       toolUse: true,

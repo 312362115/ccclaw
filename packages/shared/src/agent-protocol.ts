@@ -26,6 +26,18 @@ export type ContentBlock = TextContentBlock | ImageContentBlock;
 
 // ====== Runtime 配置（Server → Runner，启动时注入） ======
 
+/** MCP Server 配置（随 RuntimeConfig 下发给 Runner） */
+export interface MCPServerEntry {
+  name: string;
+  command?: string;              // stdio mode
+  args?: string[];
+  env?: Record<string, string>;
+  transport?: 'stdio' | 'sse' | 'streamable-http';
+  url?: string;                  // HTTP mode
+  headers?: Record<string, string>;
+  enabledTools?: string[];
+}
+
 export interface RuntimeConfig {
   workspaceId: string;          // 主 DB 中的 workspace UUID
   apiKey: string;
@@ -34,6 +46,7 @@ export interface RuntimeConfig {
   model?: string;               // 默认模型
   systemPrompt?: string;
   skills?: string[];
+  mcpServers?: MCPServerEntry[];
   userPreferences?: {
     customInstructions?: string;
     toolConfirmMode?: string;
@@ -58,7 +71,9 @@ export interface AgentResponse {
   type: 'text_delta' | 'thinking_delta' | 'tool_use_start' | 'tool_use_delta' | 'tool_use_end'
     | 'tool_result' | 'confirm_request' | 'subagent_started' | 'subagent_result'
     | 'consolidation' | 'plan_mode' | 'usage'
-    | 'done' | 'session_done' | 'error';
+    | 'done' | 'session_done' | 'error'
+    // UX 增强事件
+    | 'tool_output_delta' | 'diff_preview' | 'tool_error_options';
   [key: string]: unknown;
 }
 

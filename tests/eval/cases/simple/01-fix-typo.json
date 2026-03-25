@@ -1,0 +1,13 @@
+{
+  "id": "simple-01",
+  "name": "修复函数名 typo",
+  "difficulty": "simple",
+  "description": "文件 src/utils.ts 中的函数名 caclulate 拼写错误，应改为 calculate。同时更新 src/main.ts 中的引用。",
+  "fixture": "typo-project",
+  "acceptance": [
+    { "type": "file_contains", "file": "src/utils.ts", "pattern": "function calculate" },
+    { "type": "file_not_contains", "file": "src/utils.ts", "pattern": "caclulate" },
+    { "type": "file_contains", "file": "src/main.ts", "pattern": "calculate" },
+    { "type": "file_not_contains", "file": "src/main.ts", "pattern": "caclulate" }
+  ]
+}

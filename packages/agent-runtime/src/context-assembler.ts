@@ -15,6 +15,9 @@ import type { WorkspaceDB, Memory } from './workspace-db.js';
 import type { ToolRegistry, ToolDefinition } from './tool-registry.js';
 import { stripImageContent } from './llm/base.js';
 import type { ProviderCapabilities } from './llm/types.js';
+import type { ModelProfile, AgentPhase } from './llm/model-profile.js';
+import { getPhasePrompt } from './prompts/index.js';
+import { estimateTokens } from './utils/token-estimator.js';
 
 // ====== Types ======
 
@@ -67,11 +70,24 @@ export class ContextAssembler {
     sessionId: string;
     serverContext: ServerContext;
     capabilities?: ProviderCapabilities;
+    /** 当前模型的 Profile（可选，传入后启用 Profile 驱动的 prompt 策略） */
+    modelProfile?: ModelProfile;
+    /** 当前 Agent 阶段（可选，用于分阶段 prompt） */
+    phase?: AgentPhase;
   }): AssembledContext {
     const parts: string[] = [];
-    const { sessionId, serverContext } = params;
+    const { sessionId, serverContext, modelProfile, phase } = params;
 
-    // Step 1: Bootstrap 文件
+    // === Profile 驱动的分阶段 prompt ===
+    // 如果模型 Profile 声明 preferPhasedPrompt=true，使用精简的阶段化 prompt 替代默认的 bootstrap
+    const usePhasedPrompt = modelProfile?.promptStrategy.preferPhasedPrompt && phase;
+
+    if (usePhasedPrompt) {
+      // 分阶段 prompt：用阶段专用 prompt 作为基础
+      parts.push(getPhasePrompt(phase!));
+    }
+
+    // Step 1: Bootstrap 文件（分阶段模式下仍然加载，但排在阶段 prompt 之后）
     const bootstrap = this.loadBootstrapFiles();
     if (bootstrap) parts.push(bootstrap);
 
@@ -91,6 +107,16 @@ export class ContextAssembler {
       if (summaryXML) parts.push(summaryXML);
     }
 
+    // === Profile 驱动的工具约束注入 ===
+    if (modelProfile?.promptStrategy.toolCallConstraints) {
+      parts.push(`## 工具调用规则（务必遵守）\n${modelProfile.promptStrategy.toolCallConstraints}`);
+    }
+
+    // === Profile 驱动的自定义 prompt 后缀 ===
+    if (modelProfile?.promptStrategy.customPromptSuffix) {
+      parts.push(modelProfile.promptStrategy.customPromptSuffix);
+    }
+
     // Step 5-6: 工具 schema（由 tools 字段返回）
     const tools = this.toolRegistry.getDefinitions();
 
@@ -106,8 +132,21 @@ export class ContextAssembler {
       messages = messages.map((m, i) => ({ ...m, content: stripped[i].content as string }));
     }
 
+    // === Profile 驱动的 prompt 长度裁剪 ===
+    let systemPrompt = parts.filter(Boolean).join('\n\n');
+    if (modelProfile?.promptStrategy.maxSystemPromptTokens) {
+      const maxTokens = modelProfile.promptStrategy.maxSystemPromptTokens;
+      const currentTokens = estimateTokens(systemPrompt);
+      if (currentTokens > maxTokens) {
+        // 从末尾裁剪（保留前面更重要的内容：阶段 prompt + bootstrap + 偏好）
+        const ratio = maxTokens / currentTokens;
+        const targetChars = Math.floor(systemPrompt.length * ratio * 0.95); // 留 5% 余量
+        systemPrompt = systemPrompt.slice(0, targetChars) + '\n...(system prompt truncated due to model limit)';
+      }
+    }
+
     return {
-      systemPrompt: parts.filter(Boolean).join('\n\n'),
+      systemPrompt,
       messages,
       tools,
     };
@@ -128,6 +167,20 @@ export class ContextAssembler {
         parts.push(`## ${file}\n${content}`);
       } catch {
         // 文件不存在则跳过
+      }
+    }
+
+    // 项目级配置回退：如果 .ccclaw/AGENTS.md 不存在，尝试读工作区根目录的 AGENTS.md
+    const hasAgentsMd = parts.some(p => p.startsWith('## AGENTS.md'));
+    if (!hasAgentsMd) {
+      try {
+        let content = readFileSync(join(this.homeDir, 'AGENTS.md'), 'utf-8');
+        if (content.length > BOOTSTRAP_MAX_CHARS) {
+          content = content.slice(0, BOOTSTRAP_MAX_CHARS) + '\n...(truncated)';
+        }
+        parts.push(`## AGENTS.md (项目根目录)\n${content}`);
+      } catch {
+        // 也不存在则跳过
       }
     }
 

@@ -1,5 +1,5 @@
-import { execSync } from 'node:child_process';
-import type { Tool } from '../tool-registry.js';
+import { spawn } from 'node:child_process';
+import type { Tool, ToolExecuteContext } from '../tool-registry.js';
 
 export const bashTool: Tool = {
   name: 'bash',
@@ -12,14 +12,55 @@ export const bashTool: Tool = {
     },
     required: ['command'],
   },
-  async execute(input) {
+  async execute(input, context?: ToolExecuteContext) {
     const { command, timeout = 120000 } = input as { command: string; timeout?: number };
-    const result = execSync(command, {
-      encoding: 'utf-8',
-      timeout,
-      cwd: process.env.WORKSPACE_DIR ?? '/workspace',
-      maxBuffer: 1024 * 1024, // 1MB
+    const cwd = process.env.WORKSPACE_DIR ?? '/workspace';
+
+    return new Promise<string>((resolve) => {
+      const chunks: string[] = [];
+      let killed = false;
+
+      const proc = spawn('bash', ['-c', command], {
+        cwd,
+        env: { ...process.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      const timer = setTimeout(() => {
+        killed = true;
+        proc.kill('SIGTERM');
+      }, timeout);
+
+      proc.stdout.on('data', (data: Buffer) => {
+        const text = data.toString();
+        chunks.push(text);
+        // 流式输出：实时发给前端
+        context?.onProgress?.(text);
+      });
+
+      proc.stderr.on('data', (data: Buffer) => {
+        const text = data.toString();
+        chunks.push(text);
+        context?.onProgress?.(text);
+      });
+
+      proc.on('close', (code) => {
+        clearTimeout(timer);
+        const output = chunks.join('');
+
+        if (killed) {
+          resolve(output + `\n(命令超时，已在 ${timeout}ms 后终止)`);
+        } else if (code !== 0 && code !== null) {
+          resolve(output + `\n(退出码: ${code})`);
+        } else {
+          resolve(output);
+        }
+      });
+
+      proc.on('error', (err) => {
+        clearTimeout(timer);
+        resolve(`Error: ${err.message}`);
+      });
     });
-    return result;
   },
 };

@@ -1,0 +1,13 @@
+{
+  "id": "medium-01",
+  "name": "新增商品搜索功能",
+  "difficulty": "medium",
+  "description": "在现有商品管理代码中新增搜索功能：1) 在 src/store.ts 中新增 searchProducts(keyword: string) 函数，按名称模糊搜索（不区分大小写）2) 在 src/api.ts 中新增 handleSearchProducts(keyword: string) 调用 store 的搜索函数",
+  "fixture": "cross-file",
+  "acceptance": [
+    { "type": "file_contains", "file": "src/store.ts", "pattern": "searchProducts" },
+    { "type": "file_contains", "file": "src/store.ts", "pattern": "toLowerCase" },
+    { "type": "file_contains", "file": "src/api.ts", "pattern": "handleSearchProducts" },
+    { "type": "file_contains", "file": "src/api.ts", "pattern": "searchProducts" }
+  ]
+}

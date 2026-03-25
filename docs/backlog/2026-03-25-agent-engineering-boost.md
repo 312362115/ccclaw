@@ -1,6 +1,8 @@
 ---
 priority: P0
-status: open
+status: done
+spec: docs/specs/2026-03-25-agent-engineering-boost.md
+plan: docs/plans/2026-03-25-agent-engineering-boost-plan.md
 ---
 
 # Agent 工程层提升：用工程手段补偿弱模型，追平 CC+Sonnet 体验

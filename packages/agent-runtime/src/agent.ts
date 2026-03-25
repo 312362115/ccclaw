@@ -28,6 +28,11 @@ import type {
 import { getTextContent } from './llm/types.js';
 import { classifyIntent } from './intent.js';
 import { toCLIFormat, parseToolCallsFromText } from './tool-format.js';
+import { getProfileRegistry } from './llm/factory.js';
+import type { ModelProfile, AgentPhase } from './llm/model-profile.js';
+import { shouldPlan, generatePlan, parsePlan, buildStepContext, formatPlanForDisplay } from './planner.js';
+import type { Plan, StepResult } from './planner.js';
+import { PLANNING_SYSTEM_PROMPT } from './prompts/planning.js';
 
 // ====== Types ======
 
@@ -117,7 +122,8 @@ export async function runAgent(
     // 1. 追加用户消息（DB 存纯文本，多模态内容只在本次 LLM 调用中使用）
     db.appendMessage({ session_id: sessionId, role: 'user', content: message });
 
-    // 2. 上下文整合（在组装前压缩，对齐 Claude Code 的处理方式）
+    // 2. 上下文整合（在组装前压缩，用当前消息作为相关性评分的任务提示）
+    consolidator.setCurrentTaskHint(message);
     toolRegistry.enterRestrictedMode(['memory_write', 'memory_read', 'memory_search']);
     try {
       await consolidator.consolidateIfNeeded(sessionId);
@@ -125,13 +131,23 @@ export async function runAgent(
       toolRegistry.exitRestrictedMode();
     }
 
-    // 3. 组装上下文（serverContext 由 RuntimeConfig 注入）
+    // 3. 组装上下文（serverContext 由 RuntimeConfig 注入，ModelProfile 驱动 prompt 策略）
     const serverContext: ServerContext = depsServerContext ?? {
       workspaceId: '',
       workspaceName: '',
       userPreferences: {},
     };
-    const ctx = assembler.assemble({ sessionId, serverContext });
+    const currentModel: string = (provider as any).defaultModel || 'claude-sonnet-4-20250514';
+    const profileRegistry = getProfileRegistry();
+    const modelProfile = profileRegistry.resolve(currentModel);
+    const assemblePhase: AgentPhase = isPlanMode ? 'planning' : 'coding';
+
+    const ctx = assembler.assemble({
+      sessionId,
+      serverContext,
+      modelProfile,
+      phase: assemblePhase,
+    });
 
     // 4. 获取 provider 能力
     const caps: ProviderCapabilities = provider.capabilities();
@@ -139,17 +155,40 @@ export async function runAgent(
     // 5. 转换工具定义（plan 模式下不传工具，只生成计划）
     const toolDefs = isPlanMode ? [] : ctx.tools;
 
-    // Plan 模式：修改 system prompt，引导 Agent 只输出计划
+    // Plan 模式：使用专用 planning prompt 引导结构化输出
     if (isPlanMode) {
-      ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_MODE_SUFFIX;
+      ctx.systemPrompt = PLANNING_SYSTEM_PROMPT;
     }
+
+    // Plan Execute 模式：尝试从上一轮 assistant 消息中解析 Plan，逐步执行
+    let activePlan: Plan | null = null;
     if (isPlanExecute) {
-      ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_EXECUTE_SUFFIX;
+      // 查找最近的 assistant 消息（应包含 Plan JSON）
+      const recentMessages = ctx.messages;
+      for (let i = recentMessages.length - 1; i >= 0; i--) {
+        if (recentMessages[i].role === 'assistant') {
+          activePlan = parsePlan(recentMessages[i].content);
+          break;
+        }
+      }
+
+      if (activePlan) {
+        // 注入第一步的 context
+        const stepCtx = buildStepContext(activePlan, 0, []);
+        ctx.systemPrompt = (ctx.systemPrompt || '') + stepCtx;
+        onStream({ type: 'text_delta', delta: `📋 计划已解析（${activePlan.steps.length} 步），开始执行...\n\n` });
+      } else {
+        // 解析失败，回退到旧模式
+        ctx.systemPrompt = (ctx.systemPrompt || '') + PLAN_EXECUTE_SUFFIX;
+      }
     }
 
     // 6. Agent 迭代循环
     let iteration = 0;
     let consecutiveToolErrors = 0;
+    // Plan 步骤跟踪
+    let currentPlanStep = 0;
+    const planStepResults: StepResult[] = [];
     const history: LLMMessage[] = ctx.messages.map((m, i, arr) => {
       // 对最后一条 user 消息注入多模态内容（如果有）
       if (multimodalContent && i === arr.length - 1 && m.role === 'user') {
@@ -174,15 +213,16 @@ export async function runAgent(
     while (iteration < effectiveIterLimit) {
       iteration++;
 
-      // 构建 ChatParams
+      // 构建 ChatParams — 从 ModelProfile 读取推荐参数（复用外层变量）
+      const currentPhase: AgentPhase = isPlanMode ? 'planning' : 'coding';
+      const phaseParams = profileRegistry.getPhaseParams(currentModel, currentPhase);
+
       const chatParams: ChatParams = {
-        model:
-          (provider as any).defaultModel ||
-          'claude-sonnet-4-20250514',
+        model: currentModel,
         messages: history,
         systemPrompt: ctx.systemPrompt,
-        maxTokens: 8192,
-        temperature: 0.1,
+        maxTokens: phaseParams.maxTokens,
+        temperature: phaseParams.temperature,
       };
 
       if (caps.toolUse) {
@@ -302,10 +342,26 @@ export async function runAgent(
           const result = await toolRegistry.execute(
             tc.name,
             tc.input as Record<string, unknown>,
+            {
+              toolCallId: tc.id,
+              onProgress: (delta) => {
+                onStream({ type: 'tool_output_delta', toolCallId: tc.id, delta });
+              },
+            },
           );
 
           const isError = typeof result === 'string' && result.startsWith('Error:');
           if (!isError) allErrorsThisRound = false;
+
+          // 工具执行失败时，发送错误恢复选项
+          if (isError) {
+            onStream({
+              type: 'tool_error_options',
+              toolCallId: tc.id,
+              error: result,
+              options: ['retry_fix', 'change_approach', 'manual'],
+            });
+          }
 
           onStream({ type: 'tool_result', toolCallId: tc.id, output: result });
 
@@ -336,11 +392,31 @@ export async function runAgent(
         }
         // 继续循环
       } else {
-        // 无工具调用 = 对话结束
+        // 无工具调用 = 当前步骤结束
         if (assistantContent) {
           history.push({ role: 'assistant', content: assistantContent });
         }
-        break;
+
+        // Plan 步骤推进：如果有 activePlan，推进到下一步
+        if (activePlan && currentPlanStep < activePlan.steps.length - 1) {
+          planStepResults.push({
+            stepIndex: currentPlanStep + 1,
+            success: true,
+            summary: assistantContent.slice(0, 200),
+          });
+          currentPlanStep++;
+
+          // 注入下一步的 context 到 history（作为 user 消息驱动下一轮）
+          const nextStepCtx = buildStepContext(activePlan, currentPlanStep, planStepResults);
+          const stepPrompt = `继续执行下一步。${nextStepCtx}`;
+          history.push({ role: 'user', content: stepPrompt });
+          db.appendMessage({ session_id: sessionId, role: 'user', content: stepPrompt });
+
+          onStream({ type: 'text_delta', delta: `\n\n---\n📋 步骤 ${currentPlanStep + 1}/${activePlan.steps.length}: ${activePlan.steps[currentPlanStep].description}\n\n` });
+          // 不 break，继续循环执行下一步
+        } else {
+          break;
+        }
       }
     }
 

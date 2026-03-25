@@ -61,6 +61,8 @@ export function dynamicRatio(windowTokens: number, range: readonly [number, numb
 export class Consolidator {
   private contextWindowTokens: number;
   private memoryCompressThreshold: number;
+  /** 当前任务描述（用于相关性评分，由 Agent 循环设置） */
+  private currentTaskHint: string = '';
 
   constructor(
     private db: WorkspaceDB,
@@ -69,6 +71,11 @@ export class Consolidator {
   ) {
     this.contextWindowTokens = options?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW;
     this.memoryCompressThreshold = options?.memoryCompressThreshold ?? DEFAULT_MEMORY_COMPRESS_THRESHOLD;
+  }
+
+  /** 设置当前任务提示（Agent 循环每轮调用，用于相关性评分） */
+  setCurrentTaskHint(hint: string): void {
+    this.currentTaskHint = hint;
   }
 
   /** 更新 LLM 回调（Provider 变更时调用） */
@@ -216,11 +223,22 @@ export class Consolidator {
    * 然后前移到最近的 user 消息起点（避免切断对话对）
    */
   pickBoundary(messages: Message[], tokensToRemove: number): number {
+    // 如果有任务提示，按相关性评分排序，优先压缩低相关性消息
+    if (this.currentTaskHint && messages.length > 4) {
+      return this.pickBoundaryByRelevance(messages, tokensToRemove);
+    }
+
+    // 无任务提示时，回退到时序策略（从头压缩）
+    return this.pickBoundaryByTime(messages, tokensToRemove);
+  }
+
+  /** 时序策略：从头累加直到满足 token 数（原始逻辑） */
+  private pickBoundaryByTime(messages: Message[], tokensToRemove: number): number {
     let accumulated = 0;
     let boundary = 0;
 
     for (let i = 0; i < messages.length; i++) {
-      accumulated += estimateTokens(messages[i].content) + 4; // message overhead
+      accumulated += estimateTokens(messages[i].content) + 4;
       if (accumulated >= tokensToRemove) {
         boundary = i + 1;
         break;
@@ -229,18 +247,121 @@ export class Consolidator {
 
     if (boundary === 0) return 0;
 
-    // 前移到最近的 user 消息起点（确保不切断 assistant 回复）
     while (boundary < messages.length && messages[boundary].role !== 'user') {
       boundary++;
     }
 
-    // 不要整合所有消息，至少保留最后几条
     const minKeep = 2;
     if (boundary > messages.length - minKeep) {
       boundary = Math.max(0, messages.length - minKeep);
     }
 
     return boundary;
+  }
+
+  /**
+   * 相关性策略：按相关性评分排序，找到一个连续的低相关性区间来压缩。
+   *
+   * 不能随机删消息（会破坏对话对），所以策略是：
+   * 找到相关性最低的连续消息块（对齐 turn 边界），优先压缩它。
+   */
+  private pickBoundaryByRelevance(messages: Message[], tokensToRemove: number): number {
+    // 为每条消息计算相关性分数
+    const scores = messages.map((m, i) => ({
+      index: i,
+      score: this.scoreRelevance(m, i, messages.length),
+      tokens: estimateTokens(m.content) + 4,
+    }));
+
+    // 找相关性最低的前 N 条消息（从头部区域找，因为压缩必须从头开始）
+    // 策略：在前 70% 的消息中，找到一个"低相关性截断点"
+    const searchLimit = Math.floor(messages.length * 0.7);
+    let accumulated = 0;
+    let boundary = 0;
+    let maxBoundary = 0;
+    let maxTokensAtLowScore = 0;
+
+    // 从头扫描，累计 token 并记录"低相关性区间能覆盖多少 token"
+    for (let i = 0; i < searchLimit; i++) {
+      accumulated += scores[i].tokens;
+
+      // 如果当前位置相关性较低（<0.5），这是好的压缩候选
+      if (scores[i].score < 0.5 && accumulated > maxTokensAtLowScore) {
+        maxBoundary = i + 1;
+        maxTokensAtLowScore = accumulated;
+      }
+
+      if (accumulated >= tokensToRemove) {
+        boundary = i + 1;
+        break;
+      }
+    }
+
+    // 如果纯时序方案能满足需求，就用时序
+    // 如果低相关性区间能覆盖需要的 token，优先用它
+    if (maxTokensAtLowScore >= tokensToRemove) {
+      boundary = maxBoundary;
+    }
+
+    if (boundary === 0) {
+      // 回退到时序策略
+      return this.pickBoundaryByTime(messages, tokensToRemove);
+    }
+
+    // 对齐到 turn 边界
+    while (boundary < messages.length && messages[boundary].role !== 'user') {
+      boundary++;
+    }
+
+    const minKeep = 2;
+    if (boundary > messages.length - minKeep) {
+      boundary = Math.max(0, messages.length - minKeep);
+    }
+
+    return boundary;
+  }
+
+  /**
+   * 计算单条消息的相关性分数（0-1，1=最相关）。
+   *
+   * 三个维度加权：
+   * - 关键词匹配（0.5 权重）：消息与当前任务描述的关键词重叠度
+   * - 工具结果权重（0.2 权重）：tool 角色的消息包含代码/路径，价值更高
+   * - 时间新鲜度（0.3 权重）：越新的消息越相关
+   */
+  private scoreRelevance(message: Message, index: number, total: number): number {
+    let score = 0;
+
+    // 1. 关键词匹配
+    if (this.currentTaskHint) {
+      const taskWords = this.extractKeywords(this.currentTaskHint);
+      const msgWords = this.extractKeywords(message.content);
+      if (taskWords.length > 0 && msgWords.length > 0) {
+        const overlap = taskWords.filter(w => msgWords.includes(w)).length;
+        score += (overlap / taskWords.length) * 0.5;
+      }
+    }
+
+    // 2. 工具结果权重（包含文件路径或代码的消息更有价值）
+    if (message.role === 'tool') {
+      score += 0.2;
+    }
+
+    // 3. 时间新鲜度（线性衰减）
+    const recency = total > 1 ? index / (total - 1) : 1;
+    score += recency * 0.3;
+
+    return Math.min(1, score);
+  }
+
+  /** 提取关键词（简单分词，去停用词） */
+  private extractKeywords(text: string): string[] {
+    const stopWords = new Set(['的', '了', '是', '在', '和', '与', '或', '一个', '这个', 'the', 'a', 'an', 'is', 'in', 'to', 'and', 'or', 'for', 'of']);
+    return text
+      .toLowerCase()
+      .split(/[\s,.\-_/\\:;!?，。、！？]+/)
+      .filter(w => w.length > 1 && !stopWords.has(w))
+      .slice(0, 20);
   }
 
   /**
