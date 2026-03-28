@@ -19,7 +19,10 @@ import type {
   TokenUsage,
 } from './providers/types.js';
 import type { ToolRegistry } from './tools/registry.js';
-import { toCLIFormat, parseToolCallsFromText } from './tools/format.js';
+import type { HarnessConfig } from './harness/types.js';
+import { toCLIFormat, parseToolCallsFromText, looksLikeFailedToolCall } from './tools/format.js';
+import type { ToolReliabilityConfig } from './harness/tool-reliability.js';
+import { ToolReliabilityTracker, DEFAULT_TOOL_RELIABILITY_CONFIG } from './harness/tool-reliability.js';
 
 // ============================================================
 // Public types
@@ -34,6 +37,10 @@ export interface LoopDeps {
   temperature?: number;
   maxTokens?: number;
   extra?: Record<string, unknown>;
+  /** 工具可靠性配置（默认全部启用） */
+  reliability?: Partial<ToolReliabilityConfig>;
+  /** Harness 自适应层配置（由 createAgent 根据模型 Profile 自动生成） */
+  harnessConfig?: HarnessConfig;
 }
 
 export type StreamCallback = (event: AgentStreamEvent) => void;
@@ -44,6 +51,10 @@ export type StreamCallback = (event: AgentStreamEvent) => void;
 
 /** 连续工具执行错误次数上限，超过后停止循环 */
 const MAX_CONSECUTIVE_ERRORS = 3;
+
+/** L3 重试时注入的纠错提示 */
+const TOOL_CALL_RETRY_PROMPT =
+  '你上一次的工具调用格式有误，无法解析。正确格式是：<tool name="工具名">{"参数": "值"}</tool>。请重新调用工具。';
 
 // ============================================================
 // Agent Loop
@@ -71,7 +82,18 @@ export async function runAgentLoop(
     extra,
   } = deps;
 
-  const supportsToolUse = provider.capabilities().toolUse;
+  // 合并可靠性配置
+  const reliabilityConfig: ToolReliabilityConfig = {
+    ...DEFAULT_TOOL_RELIABILITY_CONFIG,
+    ...deps.reliability,
+  };
+  const tracker = reliabilityConfig.metrics ? new ToolReliabilityTracker() : null;
+
+  // Harness 自适应：forceCliMode 强制走 CLI 文本解析，绕过原生 function calling
+  const harness = deps.harnessConfig;
+  const supportsToolUse = (harness?.forceCliMode)
+    ? false
+    : provider.capabilities().toolUse;
 
   // 构建工具定义（LLM 格式）
   const toolDefs = toolRegistry.getDefinitions();
@@ -88,6 +110,9 @@ export async function runAgentLoop(
 
   // 累计 token 用量
   const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0 };
+
+  // L3 重试计数器（解析失败时注入纠错提示的次数）
+  let parseRetryCount = 0;
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     // ---- 构建请求参数 ----
@@ -184,6 +209,11 @@ export async function runAgentLoop(
       }));
     }
 
+    // Harness 自适应：singleToolPerTurn 限制每轮只执行第一个工具调用
+    if (harness?.singleToolPerTurn && toolCalls.length > 1) {
+      toolCalls = [toolCalls[0]];
+    }
+
     // ---- 追加 assistant 消息 ----
     const assistantMsg: LLMMessage = {
       role: 'assistant',
@@ -194,11 +224,32 @@ export async function runAgentLoop(
     }
     messages.push(assistantMsg);
 
-    // ---- 无工具调用 → 结束 ----
+    // ---- 无工具调用 → 检查是否需要 L3 重试 ----
     if (toolCalls.length === 0) {
+      // L3: 如果文本看起来有工具调用意图但解析失败，注入纠错提示让 LLM 重试
+      if (
+        reliabilityConfig.retryOnParseError &&
+        !supportsToolUse &&
+        parseRetryCount < reliabilityConfig.maxRetries &&
+        looksLikeFailedToolCall(assistantText)
+      ) {
+        parseRetryCount++;
+        tracker?.recordParseError();
+        tracker?.recordRetry();
+
+        // 注入纠错提示作为 user 消息，继续循环
+        messages.push({ role: 'user', content: TOOL_CALL_RETRY_PROMPT });
+        // 不计入正常迭代：回退 iteration 计数
+        iteration--;
+        continue;
+      }
+
       onStream({ type: 'session_done', usage: totalUsage });
       return;
     }
+
+    // 解析成功，重置重试计数
+    parseRetryCount = 0;
 
     // ---- 执行工具 ----
     const toolResults: LLMToolResult[] = [];
@@ -214,6 +265,9 @@ export async function runAgentLoop(
       } else {
         consecutiveErrors = 0;
       }
+
+      // 记录调用指标
+      tracker?.recordCall(tc.name, !isError);
 
       toolResults.push({ toolCallId: tc.id, output });
 
