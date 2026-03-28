@@ -8,6 +8,7 @@ import type {
   TokenUsage,
   LLMToolCall,
 } from './providers/types.js';
+import type { EvalResult } from './harness/evaluator.js';
 
 /** Agent 配置 */
 export interface AgentConfig {
@@ -33,6 +34,24 @@ export interface AgentConfig {
   thinking?: { budgetTokens: number };
   /** 提示词增强（如自动注入工具使用指南） */
   promptEnhancements?: boolean;
+  /** Harness 自适应层覆盖配置 */
+  harness?: { tier?: import('./harness/types.js').HarnessTier } & Partial<import('./harness/types.js').HarnessConfig>;
+  /** 独立评审配置 */
+  evaluator?: {
+    enabled: boolean;
+    /** 评审模型（默认与主模型相同） */
+    model?: string;
+    /** 评审模型 API 密钥（默认与主模型相同） */
+    apiKey?: string;
+    /** 评审模型 API 基础地址（默认与主模型相同） */
+    apiBase?: string;
+    /** 评审标准 */
+    criteria: Array<{ name: string; description: string; weight?: number }>;
+    /** 最低通过分数（默认 70） */
+    threshold?: number;
+    /** 评审触发时机（MVP 仅支持 final） */
+    triggerAfter?: 'final';
+  };
   /** 事件回调（流式输出时触发） */
   onEvent?: (event: AgentStreamEvent) => void;
 }
@@ -47,6 +66,8 @@ export interface AgentResult {
   usage: TokenUsage;
   /** 实际执行的迭代轮次 */
   iterations: number;
+  /** 独立评审结果（仅在配置 evaluator 时存在） */
+  evaluation?: EvalResult;
 }
 
 /** Agent 接口 */

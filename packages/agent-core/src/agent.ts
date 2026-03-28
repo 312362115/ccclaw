@@ -8,11 +8,13 @@
 import type { AgentConfig, AgentResult, Agent } from './types.js';
 import type { AgentStreamEvent, TokenUsage, LLMToolCall } from './providers/types.js';
 import { createProvider } from './providers/factory.js';
+import { Evaluator } from './harness/evaluator.js';
 import { ToolRegistry } from './tools/registry.js';
 import { ProfileRegistry } from './profiles/registry.js';
 import { assembleSystemPrompt } from './context/assembler.js';
 import { runAgentLoop } from './agent-loop.js';
 import type { LoopDeps } from './agent-loop.js';
+import { buildHarnessConfig } from './harness/adaptive.js';
 
 /** 默认最大迭代轮次 */
 const DEFAULT_MAX_ITERATIONS = 10;
@@ -57,14 +59,17 @@ export function createAgent(config: AgentConfig): Agent {
       : undefined,
   });
 
-  // ---- 5. 扩展参数（thinking 等） ----
+  // ---- 5. Harness 自适应层 ----
+  const harnessConfig = buildHarnessConfig(profile, config.harness);
+
+  // ---- 6. 扩展参数（thinking 等） ----
   const extra: Record<string, unknown> = {};
   if (config.thinking && profile.capabilities.extendedThinking) {
     extra.enable_thinking = true;
     extra.thinking_budget = config.thinking.budgetTokens;
   }
 
-  // ---- 6. 构建 LoopDeps ----
+  // ---- 7. 构建 LoopDeps ----
   const deps: LoopDeps = {
     provider,
     toolRegistry,
@@ -74,9 +79,26 @@ export function createAgent(config: AgentConfig): Agent {
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     extra: Object.keys(extra).length > 0 ? extra : undefined,
+    harnessConfig,
   };
 
-  // ---- 7. 返回 Agent 对象 ----
+  // ---- 8. 独立评审者 ----
+  let evaluator: Evaluator | undefined;
+  if (config.evaluator?.enabled && config.evaluator.criteria.length > 0) {
+    const evalProvider = createProvider({
+      type: config.provider ?? 'compat',
+      apiKey: config.evaluator.apiKey ?? config.apiKey,
+      apiBase: config.evaluator.apiBase ?? config.apiBase,
+    });
+    evaluator = new Evaluator({
+      provider: evalProvider,
+      model: config.evaluator.model ?? config.model,
+      criteria: config.evaluator.criteria,
+      threshold: config.evaluator.threshold,
+    });
+  }
+
+  // ---- 9. 返回 Agent 对象 ----
   return {
     async run(message: string): Promise<AgentResult> {
       let finalText = '';
@@ -113,11 +135,22 @@ export function createAgent(config: AgentConfig): Agent {
 
       await runAgentLoop(message, onStream, deps);
 
+      // 独立评审（triggerAfter === 'final' 或未指定时默认触发）
+      let evaluation;
+      if (evaluator && finalText) {
+        try {
+          evaluation = await evaluator.evaluate(finalText);
+        } catch {
+          // 评审失败不阻塞主流程，静默降级
+        }
+      }
+
       return {
         text: finalText,
         toolCalls: allToolCalls,
         usage: totalUsage,
         iterations,
+        evaluation,
       };
     },
 

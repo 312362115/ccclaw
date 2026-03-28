@@ -10,3 +10,7 @@ export { ProfileRegistry } from './profiles/registry.js';
 export { ToolRegistry } from './tools/registry.js';
 export type { MemoryStore } from './memory/types.js';
 export { InMemoryStore } from './memory/in-memory-store.js';
+export type { EvalCriterion, EvalResult, EvaluatorConfig } from './harness/evaluator.js';
+export { Evaluator } from './harness/evaluator.js';
+export type { HarnessTier, HarnessConfig } from './harness/types.js';
+export { resolveHarnessTier, buildHarnessConfig } from './harness/adaptive.js';
