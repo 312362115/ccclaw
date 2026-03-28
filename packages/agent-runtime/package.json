@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@agent-core/sdk": "workspace:*",
     "@ccclaw/shared": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "pino": "^9.6.0",

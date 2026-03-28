@@ -29,6 +29,9 @@ importers:
 
   packages/agent-runtime:
     dependencies:
+      '@agent-core/sdk':
+        specifier: workspace:*
+        version: link:../agent-core
       '@ccclaw/shared':
         specifier: workspace:*
         version: link:../shared
