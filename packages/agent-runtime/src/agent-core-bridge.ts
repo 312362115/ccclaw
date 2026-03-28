@@ -7,7 +7,7 @@
  * 本模块演示集成路径：现有 agent.ts 继续工作，后续重构可逐步
  * 将通用能力迁移到 agent-core，此处作为迁移入口。
  */
-import { createAgent, type AgentConfig, type Agent } from '@agent-core/sdk';
+import { createAgent, type AgentConfig, type Agent } from 'agent-core-sdk';
 
 export interface CCCLawAgentConfig {
   modelId: string;

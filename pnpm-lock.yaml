@@ -29,12 +29,12 @@ importers:
 
   packages/agent-runtime:
     dependencies:
-      '@agent-core/sdk':
-        specifier: workspace:*
-        version: link:../agent-core
       '@ccclaw/shared':
         specifier: workspace:*
         version: link:../shared
+      agent-core-sdk:
+        specifier: workspace:*
+        version: link:../agent-core
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0

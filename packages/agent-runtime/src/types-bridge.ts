@@ -1,5 +1,5 @@
 /**
- * 从 @agent-core/sdk 重导出共享类型。
+ * 从 agent-core-sdk 重导出共享类型。
  *
  * 迁移期间，agent-runtime 内部模块可从此处导入通用类型，
  * 逐步替换本地 llm/types.ts 中的重复定义。
@@ -14,4 +14,4 @@ export type {
   LLMStreamEvent as CoreLLMStreamEvent,
   TokenUsage as CoreTokenUsage,
   ModelProfile as CoreModelProfile,
-} from '@agent-core/sdk';
+} from 'agent-core-sdk';
