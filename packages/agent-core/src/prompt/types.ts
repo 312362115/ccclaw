@@ -18,5 +18,9 @@ export interface PromptComposerInput {
   enhancements?: {
     /** 是否注入工具使用指南（按 capabilityTier 自动分级） */
     toolUseGuidance?: boolean;
+    /** 是否注入思维链指南（按 capabilityTier 自动分级） */
+    chainOfThought?: boolean;
+    /** 是否注入输出格式指南（按 capabilityTier 自动分级） */
+    outputFormat?: boolean;
   };
 }

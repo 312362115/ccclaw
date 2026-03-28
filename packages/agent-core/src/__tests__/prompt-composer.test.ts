@@ -67,6 +67,102 @@ describe('composeSystemPrompt', () => {
     expect(result).not.toContain('工具使用指南');
   });
 
+  // --- Chain-of-Thought 增强 ---
+
+  it('弱模型（tier 2）注入详细思维链指南', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 2,
+      toolDefs: [],
+      enhancements: { chainOfThought: true },
+    });
+    expect(result).toContain('我的思考：');
+    expect(result).toContain('思考框架（请严格遵守）');
+  });
+
+  it('中等模型（tier 3）注入简明思维链指南', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 3,
+      toolDefs: [],
+      enhancements: { chainOfThought: true },
+    });
+    expect(result).toContain('思考框架');
+    expect(result).toContain('我目前已知什么信息');
+  });
+
+  it('强模型（tier 5）跳过思维链指南', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 5,
+      toolDefs: [],
+      enhancements: { chainOfThought: true },
+    });
+    expect(result).not.toContain('思考框架');
+  });
+
+  // --- Output Format 增强 ---
+
+  it('弱模型（tier 2）注入详细输出格式模板', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 2,
+      toolDefs: [],
+      enhancements: { outputFormat: true },
+    });
+    expect(result).toContain('输出格式指南（请严格遵守）');
+    expect(result).toContain('# 标题');
+    expect(result).toContain('## 摘要');
+    expect(result).toContain('## 结论');
+  });
+
+  it('中等模型（tier 3）注入基础输出格式指南', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 3,
+      toolDefs: [],
+      enhancements: { outputFormat: true },
+    });
+    expect(result).toContain('输出格式指南');
+    expect(result).toContain('Markdown');
+  });
+
+  it('强模型（tier 5）跳过输出格式指南', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 5,
+      toolDefs: [],
+      enhancements: { outputFormat: true },
+    });
+    expect(result).not.toContain('输出格式指南');
+  });
+
+  // --- 三增强器协同 ---
+
+  it('三个增强器同时启用时全部生效（弱模型）', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 2,
+      toolDefs: sampleTools,
+      enhancements: {
+        toolUseGuidance: true,
+        chainOfThought: true,
+        outputFormat: true,
+      },
+    });
+    expect(result).toContain('工具使用指南');
+    expect(result).toContain('思考框架');
+    expect(result).toContain('输出格式指南');
+  });
+
+  it('三个增强器同时启用但强模型全部跳过', () => {
+    const result = composeSystemPrompt({
+      capabilityTier: 5,
+      toolDefs: sampleTools,
+      enhancements: {
+        toolUseGuidance: true,
+        chainOfThought: true,
+        outputFormat: true,
+      },
+    });
+    expect(result).not.toContain('工具使用指南');
+    expect(result).not.toContain('思考框架');
+    expect(result).not.toContain('输出格式指南');
+  });
+
   it('添加工具调用约束', () => {
     const constraints = '每次最多调用 3 个工具';
     const result = composeSystemPrompt({

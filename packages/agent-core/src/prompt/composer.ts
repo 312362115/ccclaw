@@ -11,6 +11,8 @@
 import type { PromptComposerInput } from './types.js';
 import { BASE_SYSTEM_PROMPT } from './base.js';
 import { getToolGuidance } from './enhancers/tool-guidance.js';
+import { getChainOfThoughtGuidance } from './enhancers/chain-of-thought.js';
+import { getOutputFormatGuidance } from './enhancers/output-format.js';
 
 /**
  * 组合系统提示词。
@@ -27,6 +29,22 @@ export function composeSystemPrompt(input: PromptComposerInput): string {
     const guidance = getToolGuidance(input.capabilityTier);
     if (guidance) {
       sections.push(guidance);
+    }
+  }
+
+  // Layer 2b: 思维链指南
+  if (input.enhancements?.chainOfThought) {
+    const cot = getChainOfThoughtGuidance(input.capabilityTier);
+    if (cot) {
+      sections.push(cot);
+    }
+  }
+
+  // Layer 2c: 输出格式指南
+  if (input.enhancements?.outputFormat) {
+    const fmt = getOutputFormatGuidance(input.capabilityTier);
+    if (fmt) {
+      sections.push(fmt);
     }
   }
 
